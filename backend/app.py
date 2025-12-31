@@ -605,7 +605,19 @@ def api_rightsizing():
     try: vmemory = get_combined_data('vMemory')
     except: vmemory = pd.DataFrame()
 
+    try: vhost = get_combined_data('vHost')
+    except: vhost = pd.DataFrame()
+
     recommendations = []
+    
+    # Create VM -> Cluster map for efficient lookup
+    vm_cluster_map = {}
+    if not vinfo.empty and 'Cluster' in vinfo.columns:
+        for _, row in vinfo.iterrows():
+            vm_name = row['VM']
+            cluster = row.get('Cluster', '')
+            if pd.notna(cluster) and cluster != '' and cluster != '-':
+                vm_cluster_map[vm_name] = cluster
     
     # Clean numeric columns
     vinfo['CPUs'] = pd.to_numeric(vinfo['CPUs'], errors='coerce').fillna(0)
@@ -958,9 +970,241 @@ def api_rightsizing():
         except Exception as e:
             print(f"HW Version check error: {e}")
 
+    # --- 3. NEW CHECKS ---
+
+    # 3.1 Memory Ballooning/Swapping Detection (Critical Performance Issue)
+    vmemory = get_combined_data('vMemory')
+    if not vmemory.empty:
+        balloon_col = 'Ballooned MB' if 'Ballooned MB' in vmemory.columns else 'Ballooned'
+        swap_col = 'Swapped MB' if 'Swapped MB' in vmemory.columns else 'Swapped'
+        
+        if balloon_col in vmemory.columns:
+            vmemory[balloon_col] = pd.to_numeric(vmemory[balloon_col], errors='coerce').fillna(0)
+            ballooned = vmemory[vmemory[balloon_col] > 0]
+            for _, vm in ballooned.iterrows():
+                if vm['VM'] in vinfo[vinfo['Powerstate'] == 'poweredOn']['VM'].values:
+                    recommendations.append({
+                        'vm': vm['VM'], 'type': 'MEMORY_BALLOON', 'severity': 'CRITICAL',
+                        'reason': f"Memory Ballooning aktif ({vm[balloon_col]:.0f} MB). Host RAM baskısı var!",
+                        'current_value': f"{vm[balloon_col]:.0f} MB", 'recommended_value': '0 MB',
+                        'potential_savings': 0, 'resource_type': 'Performance',
+                        'source': vm.get('Source', ''), 'cluster': vm_cluster_map.get(vm['VM'], '-')
+                    })
+        
+        if swap_col in vmemory.columns:
+            vmemory[swap_col] = pd.to_numeric(vmemory[swap_col], errors='coerce').fillna(0)
+            swapped = vmemory[vmemory[swap_col] > 0]
+            for _, vm in swapped.iterrows():
+                if vm['VM'] in vinfo[vinfo['Powerstate'] == 'poweredOn']['VM'].values:
+                    recommendations.append({
+                        'vm': vm['VM'], 'type': 'MEMORY_SWAP', 'severity': 'CRITICAL',
+                        'reason': f"Memory Swapping aktif ({vm[swap_col]:.0f} MB). Ciddi performans sorunu!",
+                        'current_value': f"{vm[swap_col]:.0f} MB", 'recommended_value': '0 MB',
+                        'potential_savings': 0, 'resource_type': 'Performance',
+                        'source': vm.get('Source', ''), 'cluster': vm_cluster_map.get(vm['VM'], '-')
+                    })
+
+    # 3.2 Host vCPU:pCore Ratio (AMD/Intel aware)
+    if not vhost.empty and not vcpu.empty:
+        try:
+            # Get total vCPUs per host
+            vcpu_per_host = vcpu.groupby('Host')['CPUs'].sum().to_dict()
+            
+            for _, host in vhost.iterrows():
+                host_name = host['Host']
+                cpu_model = str(host.get('CPU Model', '')).upper()
+                
+                # Get physical cores
+                cores_col = '# Cores' if '# Cores' in host.index else 'Cores'
+                pCores = pd.to_numeric(host.get(cores_col, host.get('# CPU', 1)), errors='coerce') or 1
+                
+                # Get total vCPUs on this host
+                total_vCPUs = vcpu_per_host.get(host_name, 0)
+                
+                if pCores > 0 and total_vCPUs > 0:
+                    ratio = total_vCPUs / pCores
+                    
+                    # AMD vs Intel thresholds
+                    if 'AMD' in cpu_model or 'EPYC' in cpu_model:
+                        warn_threshold, critical_threshold = 8, 10
+                        vendor = 'AMD'
+                    else:
+                        warn_threshold, critical_threshold = 6, 8
+                        vendor = 'Intel'
+                    
+                    if ratio > critical_threshold:
+                        severity = 'CRITICAL'
+                        msg = f"vCPU:pCore oranı {ratio:.1f}:1 (>{critical_threshold}:1). Ciddi overcommitment!"
+                    elif ratio > warn_threshold:
+                        severity = 'HIGH'
+                        msg = f"vCPU:pCore oranı {ratio:.1f}:1 (>{warn_threshold}:1). Overcommitment riski."
+                    else:
+                        continue  # Ratio is OK
+                    
+                    recommendations.append({
+                        'vm': host_name, 'type': 'HOST_CPU_OVERCOMMIT', 'severity': severity,
+                        'reason': f"{msg} ({vendor}, {pCores} pCore, {total_vCPUs} vCPU)",
+                        'current_value': f"{ratio:.1f}:1", 'recommended_value': f"<{warn_threshold}:1",
+                        'potential_savings': 0, 'resource_type': 'Capacity',
+                        'source': host.get('Source', ''), 'cluster': host.get('Cluster', '-')
+                    })
+        except Exception as e:
+            print(f"vCPU:pCore ratio error: {e}")
+
+    # 3.3 Datastore Low Free Space Warning
+    vdatastore = get_combined_data('vDatastore')
+    if not vdatastore.empty:
+        try:
+            cap_col = 'Capacity MiB' if 'Capacity MiB' in vdatastore.columns else 'Capacity MB'
+            free_col = 'Free MiB' if 'Free MiB' in vdatastore.columns else 'Free MB'
+            prov_col = 'Provisioned MiB' if 'Provisioned MiB' in vdatastore.columns else 'Provisioned MB'
+            
+            if cap_col in vdatastore.columns and free_col in vdatastore.columns:
+                vdatastore[cap_col] = pd.to_numeric(vdatastore[cap_col], errors='coerce').fillna(0)
+                vdatastore[free_col] = pd.to_numeric(vdatastore[free_col], errors='coerce').fillna(0)
+                
+                for _, ds in vdatastore.iterrows():
+                    capacity = ds[cap_col]
+                    free = ds[free_col]
+                    
+                    if capacity > 0:
+                        free_pct = (free / capacity) * 100
+                        
+                        if free_pct < 5:
+                            severity = 'CRITICAL'
+                            msg = f"Datastore %{free_pct:.1f} boş. Kritik seviye!"
+                        elif free_pct < 10:
+                            severity = 'HIGH'
+                            msg = f"Datastore %{free_pct:.1f} boş. Düşük alan uyarısı."
+                        elif free_pct < 15:
+                            severity = 'MEDIUM'
+                            msg = f"Datastore %{free_pct:.1f} boş. İzlenmeli."
+                        else:
+                            continue
+                        
+                        recommendations.append({
+                            'vm': ds['Name'], 'type': 'DATASTORE_LOW_SPACE', 'severity': severity,
+                            'reason': msg,
+                            'current_value': f"{free_pct:.1f}%", 'recommended_value': '>15%',
+                            'potential_savings': 0, 'resource_type': 'Storage',
+                            'source': ds.get('Source', ''), 'cluster': ds.get('Cluster name', '-')
+                        })
+                
+                # 3.4 Datastore Overcommitment
+                if prov_col in vdatastore.columns:
+                    vdatastore[prov_col] = pd.to_numeric(vdatastore[prov_col], errors='coerce').fillna(0)
+                    
+                    for _, ds in vdatastore.iterrows():
+                        capacity = ds[cap_col]
+                        provisioned = ds[prov_col]
+                        
+                        if capacity > 0 and provisioned > capacity:
+                            overcommit_pct = ((provisioned - capacity) / capacity) * 100
+                            
+                            if overcommit_pct > 100:
+                                severity = 'CRITICAL'
+                            elif overcommit_pct > 50:
+                                severity = 'HIGH'
+                            else:
+                                severity = 'MEDIUM'
+                            
+                            recommendations.append({
+                                'vm': ds['Name'], 'type': 'DATASTORE_OVERCOMMIT', 'severity': severity,
+                                'reason': f"Provisioned ({provisioned/1024:.0f} GB) > Capacity ({capacity/1024:.0f} GB). %{overcommit_pct:.0f} overcommit.",
+                                'current_value': f"{provisioned/1024:.0f} GB", 'recommended_value': f"<{capacity/1024:.0f} GB",
+                                'potential_savings': 0, 'resource_type': 'Storage',
+                                'source': ds.get('Source', ''), 'cluster': ds.get('Cluster name', '-')
+                            })
+        except Exception as e:
+            print(f"Datastore check error: {e}")
+
+    # 3.5 Connected Floppy (Security Risk)
+    try:
+        vfloppy = get_combined_data('vFloppy')
+        if not vfloppy.empty and 'Connected' in vfloppy.columns:
+            connected_floppy = vfloppy[vfloppy['Connected'].astype(str).str.lower() == 'true']
+            for _, vm in connected_floppy.iterrows():
+                recommendations.append({
+                    'vm': vm['VM'], 'type': 'FLOPPY_CONNECTED', 'severity': 'LOW',
+                    'reason': "Floppy sürücü bağlı. Güvenlik riski ve migration engelleyebilir.",
+                    'current_value': 'Connected', 'recommended_value': 'Disconnected',
+                    'potential_savings': 0, 'resource_type': 'Security',
+                    'source': vm.get('Source', ''), 'cluster': vm_cluster_map.get(vm['VM'], '-')
+                })
+    except Exception as e:
+        print(f"Floppy check skipped: {e}")
+
+    # 3.6 Thin Provisioning Analysis (High Provisioned:Used Ratio)
+    vpartition = get_combined_data('vPartition')
+    if not vpartition.empty and not vinfo.empty:
+        try:
+            consumed_col = 'Consumed MB' if 'Consumed MB' in vpartition.columns else 'Consumed MiB'
+            if consumed_col in vpartition.columns:
+                # Aggregate consumed per VM
+                consumed_per_vm = vpartition.groupby('VM')[consumed_col].sum().to_dict()
+                
+                for _, vm in vinfo.iterrows():
+                    provisioned = pd.to_numeric(vm.get('Provisioned MiB', vm.get('Provisioned MB', 0)), errors='coerce') or 0
+                    consumed = consumed_per_vm.get(vm['VM'], 0)
+                    
+                    if consumed > 0 and provisioned > 0:
+                        ratio = provisioned / consumed
+                        
+                        if ratio > 3 and provisioned > 102400:  # >3x and >100GB provisioned
+                            waste_gb = (provisioned - consumed) / 1024
+                            recommendations.append({
+                                'vm': vm['VM'], 'type': 'STORAGE_OVERPROVISIONED', 'severity': 'LOW',
+                                'reason': f"Provisioned/Used oranı {ratio:.1f}x. {waste_gb:.0f} GB potansiyel israf.",
+                                'current_value': f"{provisioned/1024:.0f} GB prov", 'recommended_value': f"{consumed/1024:.0f} GB used",
+                                'potential_savings': waste_gb, 'resource_type': 'DISK_GB',
+                                'source': vm['Source'], 'cluster': vm_cluster_map.get(vm['VM'], '-')
+                            })
+        except Exception as e:
+            print(f"Thin provisioning check error: {e}")
+
+    # --- FILTER AND SORT ---
+    # Show items with savings > 0 OR compliance/health types
+    compliance_types = [
+        'EOL_OS', 'OLD_HW_VERSION', 'VM_TOOLS', 'OLD_SNAPSHOT', 
+        'LEGACY_NIC', 'CONSOLIDATE_SNAPSHOTS', 'CPU_LIMIT', 'RAM_LIMIT',
+        'ZOMBIE_RESOURCE', 'NUMA_ALIGNMENT', 'MEMORY_BALLOON', 'MEMORY_SWAP',
+        'HOST_CPU_OVERCOMMIT', 'DATASTORE_LOW_SPACE', 'DATASTORE_OVERCOMMIT',
+        'FLOPPY_CONNECTED', 'STORAGE_OVERPROVISIONED'
+    ]
+    
+    filtered_recommendations = [
+        r for r in recommendations 
+        if float(r.get('potential_savings', 0)) > 0 or r.get('type') in compliance_types
+    ]
+    
+    filtered_recommendations.sort(key=lambda x: (
+        {'CRITICAL': 0, 'HIGH': 1, 'MEDIUM': 2, 'LOW': 3}.get(x.get('severity', 'LOW'), 4),
+        -float(x.get('potential_savings', 0))
+    ))
+
+    # Clean NaN values for valid JSON output
+    def clean_nan(obj):
+        if isinstance(obj, float) and (obj != obj):  # NaN check
+            return None
+        if isinstance(obj, dict):
+            return {k: clean_nan(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [clean_nan(v) for v in obj]
+        return obj
+    
+    cleaned_recommendations = clean_nan(filtered_recommendations)
+    
+    # Also replace None with empty string for string fields
+    for rec in cleaned_recommendations:
+        for key in ['vm', 'type', 'severity', 'reason', 'current_value', 'recommended_value', 'resource_type', 'source', 'cluster']:
+            if rec.get(key) is None:
+                rec[key] = '-'
+        if rec.get('potential_savings') is None:
+            rec['potential_savings'] = 0
+
     return jsonify({
-        'total_recommendations': len(recommendations),
-        'recommendations': recommendations
+        'total_recommendations': len(cleaned_recommendations),
+        'recommendations': cleaned_recommendations
     })
 
 @app.route('/api/reports/disk-waste')

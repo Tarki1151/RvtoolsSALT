@@ -11,12 +11,75 @@ export async function loadOptimization() {
     // Setup PDF dropdown toggle
     setupPDFDropdown();
 
+    // Setup custom tooltips
+    setupTooltips();
+
     await Promise.all([
         loadSavingsSummary(),
         loadRightSizing(),
         loadDiskWaste(),
         loadZombieDisks()
     ]);
+}
+
+// Custom rich tooltip for optimization types
+function setupTooltips() {
+    // Remove existing tooltip container if any
+    document.querySelector('.tooltip-container')?.remove();
+
+    // Create tooltip container
+    const tooltip = document.createElement('div');
+    tooltip.className = 'tooltip-container';
+    document.body.appendChild(tooltip);
+
+    // Event delegation for opt-type-badge OR rightsizing table rows
+    document.addEventListener('mouseover', (e) => {
+        // Check for badge first
+        let badge = e.target.closest('.opt-type-badge');
+        let type = badge?.dataset?.type;
+
+        // If no badge, check for table row in rightsizing table
+        if (!type) {
+            const row = e.target.closest('#rightsizing-table tbody tr');
+            if (row) {
+                type = row.dataset.type;
+            }
+        }
+
+        if (!type) return;
+
+        const info = window.OPTIMIZATION_TYPES?.[type];
+        if (!info) return;
+
+        // Build rich tooltip content
+        tooltip.innerHTML = `
+            <div class="tooltip-title">
+                <i class="fas ${info.icon}"></i>
+                ${info.label}
+            </div>
+            <div class="tooltip-desc">${info.desc}</div>
+            <div class="tooltip-action">
+                <strong>📋 Öneri:</strong> ${info.action}
+            </div>
+        `;
+
+        // Position tooltip near mouse
+        const target = badge || e.target.closest('#rightsizing-table tbody tr');
+        if (target) {
+            const rect = target.getBoundingClientRect();
+            tooltip.style.left = Math.min(rect.left + 20, window.innerWidth - 370) + 'px';
+            tooltip.style.top = (rect.bottom + 8) + 'px';
+            tooltip.classList.add('visible');
+        }
+    });
+
+    document.addEventListener('mouseout', (e) => {
+        const badge = e.target.closest('.opt-type-badge');
+        const row = e.target.closest('#rightsizing-table tbody tr');
+        if (badge || row) {
+            tooltip.classList.remove('visible');
+        }
+    });
 }
 
 function setupPDFDropdown() {
@@ -118,8 +181,9 @@ function renderRightSizingTable(recommendations) {
 
     tbody.innerHTML = recommendations.map(rec => {
         let severityClass = 'badge-info';
-        if (rec.severity === 'HIGH') severityClass = 'badge-danger';
+        if (rec.severity === 'CRITICAL' || rec.severity === 'HIGH') severityClass = 'badge-danger';
         else if (rec.severity === 'MEDIUM') severityClass = 'badge-warning';
+        else if (rec.severity === 'LOW') severityClass = 'badge-success';
 
         return `
             <tr data-type="${rec.type}">
@@ -242,24 +306,162 @@ function formatLabel(key) {
     return labels[key] || key;
 }
 
+// Optimization type definitions with explanations
+const OPTIMIZATION_TYPES = {
+    'POWERED_OFF_DISK': {
+        label: 'Kapalı VM (Disk)',
+        icon: 'fa-power-off',
+        color: 'warning',
+        desc: 'VM kapalı durumda ancak disk alanı hala kullanılıyor.',
+        action: 'VM artık gerekmiyorsa silin veya disk\'i arşivleyin. DR için gerekliyse belgelendirin.'
+    },
+    'CPU_UNDERUTILIZED': {
+        label: 'Düşük CPU Kullanımı',
+        icon: 'fa-chart-line',
+        color: 'info',
+        desc: 'vCPU kullanımı sürekli %50\'nin altında.',
+        action: 'vCPU sayısını azaltın. Bu, scheduler overhead\'ini düşürür ve performansı artırır.'
+    },
+    'CONSOLIDATE_SNAPSHOTS': {
+        label: 'Snapshot Birleştirme',
+        icon: 'fa-layer-group',
+        color: 'warning',
+        desc: 'Birden fazla snapshot zinciri mevcut. I/O performansını düşürür.',
+        action: 'Snapshot\'ları birleştirin veya gereksizleri silin. Her snapshot I/O gecikmesi ekler.'
+    },
+    'APP_OPTIMIZATION': {
+        label: 'Uygulama Analizi',
+        icon: 'fa-cogs',
+        color: 'info',
+        desc: 'Uygulama türüne göre kaynak optimizasyonu önerisi.',
+        action: 'Uygulamanın gerçek ihtiyaçlarına göre kaynakları ayarlayın.'
+    },
+    'VM_TOOLS': {
+        label: 'VMware Tools',
+        icon: 'fa-tools',
+        color: 'warning',
+        desc: 'VMware Tools kurulu değil veya eski sürüm.',
+        action: 'Güncel VMware Tools kurun. Performans ve yönetim özelliklerini etkiler.'
+    },
+    'ZOMBIE_RESOURCE': {
+        label: 'Unutulmuş Kaynak',
+        icon: 'fa-ghost',
+        color: 'warning',
+        desc: 'Bağlı CD/ISO veya kullanılmayan cihaz tespit edildi.',
+        action: 'Bağlı medyayı çıkarın. vMotion\'ı engelleyebilir ve güvenlik riski oluşturur.'
+    },
+    'NUMA_ALIGNMENT': {
+        label: 'NUMA Hizalama',
+        icon: 'fa-microchip',
+        color: 'info',
+        desc: 'Tek sayıda vCPU atanmış. NUMA optimizasyonu bozuluyor.',
+        action: 'vCPU\'yu çift sayıya yuvarlayın veya socket başına core ayarlayın.'
+    },
+    'LEGACY_NIC': {
+        label: 'Eski Ağ Kartı',
+        icon: 'fa-ethernet',
+        color: 'warning',
+        desc: 'E1000 gibi eski NIC kullanılıyor. VMXNET3\'e göre yavaş.',
+        action: 'VMXNET3\'e geçin. 10x daha iyi performans, düşük CPU kullanımı.'
+    },
+    'EOL_OS': {
+        label: 'EOL İşletim Sistemi',
+        icon: 'fa-skull',
+        color: 'danger',
+        desc: 'İşletim sistemi artık desteklenmiyor (End-of-Life).',
+        action: 'Güvenlik yamaları almıyorsunuz! Acil olarak yeni OS\'e migrate edin.'
+    },
+    'OLD_SNAPSHOT': {
+        label: 'Eski Snapshot',
+        icon: 'fa-camera',
+        color: 'warning',
+        desc: 'Snapshot 7 günden eski. Performansı düşürür, disk büyümesine neden olur.',
+        action: 'Artık gerekmiyorsa silin. Snapshot uzun süreli yedek değildir.'
+    },
+    'CPU_LIMIT': {
+        label: 'CPU Limiti',
+        icon: 'fa-tachometer-alt',
+        color: 'warning',
+        desc: 'CPU limit ayarlanmış. Kaynak olsa bile VM kullanamıyor.',
+        action: 'Limiti kaldırın. Reservation tercih edilir, limit performans sorunlarına yol açar.'
+    },
+    'RAM_LIMIT': {
+        label: 'RAM Limiti',
+        icon: 'fa-tachometer-alt',
+        color: 'warning',
+        desc: 'Memory limit ayarlanmış. Swapping\'e zorluyor.',
+        action: 'Limiti kaldırın. Memory limit neredeyse hiçbir zaman doğru çözüm değildir.'
+    },
+    'OLD_HW_VERSION': {
+        label: 'Eski VM Sürümü',
+        icon: 'fa-box',
+        color: 'info',
+        desc: 'VM hardware versiyonu ESXi\'nin desteklediğinden düşük.',
+        action: 'VM\'i kapatıp hardware upgrade yapın. Yeni özellikler ve performans kazanın.'
+    },
+    'MEMORY_BALLOON': {
+        label: 'Memory Ballooning',
+        icon: 'fa-exclamation-triangle',
+        color: 'danger',
+        desc: 'Host RAM\'i yetersiz, VM\'den memory geri alınıyor. Kritik performans sorunu!',
+        action: 'Host\'a RAM ekleyin veya VM\'leri başka host\'a taşıyın. Acil müdahale gerekli!'
+    },
+    'MEMORY_SWAP': {
+        label: 'Memory Swapping',
+        icon: 'fa-exclamation-circle',
+        color: 'danger',
+        desc: 'VM memory\'si diske swap ediliyor. Ciddi performans kaybı!',
+        action: 'Host\'a RAM ekleyin veya VM\'leri dengeleyin. Swap = çok yavaş performans.'
+    },
+    'HOST_CPU_OVERCOMMIT': {
+        label: 'Host CPU Overcommit',
+        icon: 'fa-server',
+        color: 'warning',
+        desc: 'vCPU:pCore oranı eşik değerin üstünde. CPU contention riski.',
+        action: 'VM\'leri başka host\'lara dağıtın veya vCPU\'ları azaltın.'
+    },
+    'DATASTORE_LOW_SPACE': {
+        label: 'Datastore Düşük Alan',
+        icon: 'fa-database',
+        color: 'danger',
+        desc: 'Datastore\'da boş alan kritik seviyede. Out-of-space riski!',
+        action: 'Acil temizlik yapın: eski snapshot, orphan disk, template. Veya kapasite ekleyin.'
+    },
+    'DATASTORE_OVERCOMMIT': {
+        label: 'Datastore Overcommit',
+        icon: 'fa-database',
+        color: 'warning',
+        desc: 'Provisioned alan fiziksel kapasiteyi aşıyor.',
+        action: 'Thin provisioned disk\'ler büyüdükçe yer kalmayabilir. İzleyin veya kapasite ekleyin.'
+    },
+    'FLOPPY_CONNECTED': {
+        label: 'Floppy Bağlı',
+        icon: 'fa-save',
+        color: 'info',
+        desc: 'Eski floppy sürücü bağlı. Güvenlik riski ve migration engelleyebilir.',
+        action: 'Floppy\'yi disconnect edin veya kaldırın.'
+    },
+    'STORAGE_OVERPROVISIONED': {
+        label: 'Storage Fazla Provision',
+        icon: 'fa-hdd',
+        color: 'info',
+        desc: 'Provisioned alan, kullanılan alandan çok yüksek.',
+        action: 'Disk\'i küçültün veya thin provisioning kullanın. Gereksiz kapasite tutmayın.'
+    }
+};
+
 function formatType(type) {
-    const types = {
-        'POWERED_OFF_DISK': 'Kapalı VM (Disk)',
-        'CPU_UNDERUTILIZED': 'Düşük CPU Kullanımı',
-        'CONSOLIDATE_SNAPSHOTS': 'Snapshot Birleştirme',
-        'APP_OPTIMIZATION': 'Uygulama Analizi',
-        'VM_TOOLS': 'VMware Tools Sorunu',
-        'ZOMBIE_RESOURCE': 'Unutulmuş Kaynak (ISO)',
-        'NUMA_ALIGNMENT': 'vCPU/NUMA Hizalama',
-        'LEGACY_NIC': 'Eski Ağ Kartı',
-        'EOL_OS': 'EOL İşletim Sistemi',
-        'OLD_SNAPSHOT': 'Eski Snapshot (>7 gün)',
-        'CPU_LIMIT': 'CPU Limiti (Performans)',
-        'RAM_LIMIT': 'RAM Limiti (Performans)',
-        'OLD_HW_VERSION': 'Eski VM Sürümü'
-    };
-    return types[type] || type;
+    const info = OPTIMIZATION_TYPES[type];
+    if (!info) return type;
+
+    // Return span with tooltip data attributes
+    return `<span class="opt-type-badge" data-type="${type}" title="${info.desc}\n\n📋 Öneri: ${info.action}">
+        <i class="fas ${info.icon}"></i> ${info.label}
+    </span>`;
 }
+
+// Expose for potential external use
+window.OPTIMIZATION_TYPES = OPTIMIZATION_TYPES;
 
 function formatValue(value, type) {
     if (type === 'vCPU') return `${value} vCPU`;

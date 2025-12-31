@@ -1845,3 +1845,86 @@ th.sortable.desc i {
     object-fit: contain;
     border-radius: 6px;
 }
+
+/* Optimization Type Badge with Tooltip */
+.opt-type-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    background: rgba(var(--accent-rgb), 0.15);
+    font-size: 0.85rem;
+    cursor: help;
+    transition: all 0.2s ease;
+    white-space: pre-line;
+}
+
+.opt-type-badge:hover {
+    background: rgba(var(--accent-rgb), 0.25);
+    transform: translateY(-1px);
+}
+
+.opt-type-badge i {
+    font-size: 0.9rem;
+    color: var(--accent-color);
+}
+
+/* Native Tooltip Enhancement */
+.opt-type-badge[title] {
+    position: relative;
+}
+
+/* Better tooltip styling via CSS */
+[title] {
+    position: relative;
+}
+
+/* Custom Tooltip Container */
+.tooltip-container {
+    position: fixed;
+    z-index: 10000;
+    padding: 12px 16px;
+    background: rgba(20, 20, 30, 0.95);
+    color: #fff;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    max-width: 350px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.1);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    white-space: pre-line;
+    line-height: 1.5;
+}
+
+.tooltip-container.visible {
+    opacity: 1;
+}
+
+.tooltip-container .tooltip-title {
+    font-weight: 600;
+    color: var(--accent-color);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.tooltip-container .tooltip-desc {
+    margin-bottom: 10px;
+    color: #ccc;
+}
+
+.tooltip-container .tooltip-action {
+    background: rgba(var(--accent-rgb), 0.2);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    border-left: 3px solid var(--accent-color);
+}
+
+.tooltip-container .tooltip-action strong {
+    color: var(--accent-color);
+}
