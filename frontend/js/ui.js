@@ -138,47 +138,56 @@ export function initVMTabs() {
 }
 
 export function initSorting() {
-    document.querySelectorAll('.sortable').forEach(th => {
-        th.addEventListener('click', () => {
-            const table = th.closest('table');
-            const tbody = table.querySelector('tbody');
-            const rows = Array.from(tbody.querySelectorAll('tr'));
+    // Use event delegation - attach to document, filter by .sortable
+    document.addEventListener('click', (e) => {
+        const th = e.target.closest('.sortable');
+        if (!th) return;
 
-            if (rows.length === 0) return;
+        const table = th.closest('table');
+        if (!table) return;
 
-            const isAsc = th.classList.contains('asc');
+        const tbody = table.querySelector('tbody');
+        if (!tbody) return;
 
-            // Reset all headers
-            table.querySelectorAll('.sortable').forEach(header => {
-                header.classList.remove('asc', 'desc');
-                const icon = header.querySelector('i');
-                if (icon) icon.className = 'fas fa-sort';
-            });
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        if (rows.length === 0) return;
 
-            // Set current header
-            th.classList.add(isAsc ? 'desc' : 'asc');
-            const icon = th.querySelector('i');
-            if (icon) icon.className = `fas fa-sort-${isAsc ? 'down' : 'up'}`;
+        const isAsc = th.classList.contains('asc');
 
-            const direction = !isAsc ? 1 : -1;
-
-            rows.sort((a, b) => {
-                const index = Array.from(th.parentNode.children).indexOf(th);
-
-                let valA = a.children[index].textContent.trim();
-                let valB = b.children[index].textContent.trim();
-
-                const numA = parseFloat(valA.replace(/\./g, '').replace(/,/g, '.').replace(/[^\d.-]/g, ''));
-                const numB = parseFloat(valB.replace(/\./g, '').replace(/,/g, '.').replace(/[^\d.-]/g, ''));
-
-                if (!isNaN(numA) && !isNaN(numB) && valA.match(/\d/) && valB.match(/\d/)) {
-                    return (numA - numB) * direction;
-                }
-
-                return valA.localeCompare(valB) * direction;
-            });
-
-            rows.forEach(row => tbody.appendChild(row));
+        // Reset all headers in this table
+        table.querySelectorAll('.sortable').forEach(header => {
+            header.classList.remove('asc', 'desc');
+            const icon = header.querySelector('i');
+            if (icon) icon.className = 'fas fa-sort';
         });
+
+        // Set current header
+        th.classList.add(isAsc ? 'desc' : 'asc');
+        const icon = th.querySelector('i');
+        if (icon) icon.className = `fas fa-sort-${isAsc ? 'down' : 'up'}`;
+
+        const direction = !isAsc ? 1 : -1;
+        const index = Array.from(th.parentNode.children).indexOf(th);
+
+        rows.sort((a, b) => {
+            // Skip if cell doesn't exist
+            if (!a.children[index] || !b.children[index]) return 0;
+
+            let valA = a.children[index].textContent.trim();
+            let valB = b.children[index].textContent.trim();
+
+            // Try numeric sort
+            const numA = parseFloat(valA.replace(/\./g, '').replace(/,/g, '.').replace(/[^\d.-]/g, ''));
+            const numB = parseFloat(valB.replace(/\./g, '').replace(/,/g, '.').replace(/[^\d.-]/g, ''));
+
+            if (!isNaN(numA) && !isNaN(numB) && valA.match(/\d/) && valB.match(/\d/)) {
+                return (numA - numB) * direction;
+            }
+
+            // String sort (Turkish locale)
+            return valA.localeCompare(valB, 'tr') * direction;
+        });
+
+        rows.forEach(row => tbody.appendChild(row));
     });
 }
