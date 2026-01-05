@@ -14,6 +14,8 @@ import re
 import glob
 from io import BytesIO
 
+import config as cfg
+
 app = Flask(__name__, static_folder='../frontend', static_url_path='')
 CORS(app)
 
@@ -112,15 +114,21 @@ data_cache = {}
 def load_excel_data(filename, sheet_name):
     """Load data from Excel file with caching"""
     cache_key = f"{filename}_{sheet_name}"
-    if cache_key not in data_cache:
-        filepath = os.path.join(DATA_DIR, filename)
-        df = pd.read_excel(filepath, sheet_name=sheet_name)
-        # Convert datetime columns to string for JSON serialization
-        for col in df.columns:
-            if df[col].dtype == 'datetime64[ns]':
-                df[col] = df[col].astype(str)
-        data_cache[cache_key] = df
-    return data_cache[cache_key]
+    filepath = os.path.join(DATA_DIR, filename)
+    mtime = os.path.getmtime(filepath) if os.path.exists(filepath) else None
+
+    cached = data_cache.get(cache_key)
+    if cached and cached.get('mtime') == mtime:
+        return cached['df']
+
+    df = pd.read_excel(filepath, sheet_name=sheet_name)
+    # Convert datetime columns to string for JSON serialization
+    for col in df.columns:
+        if df[col].dtype == 'datetime64[ns]':
+            df[col] = df[col].astype(str)
+
+    data_cache[cache_key] = {'mtime': mtime, 'df': df}
+    return df
 
 def get_all_sources():
     """Get list of all Excel files in data directory"""
@@ -141,6 +149,22 @@ def get_combined_data(sheet_name):
     if all_data:
         return pd.concat(all_data, ignore_index=True)
     return pd.DataFrame()
+
+@app.route('/api/reload', methods=['POST'])
+def api_reload():
+    """Clear cached Excel data and optionally rebuild SQLite DB."""
+    try:
+        payload = request.get_json(silent=True) or {}
+        rebuild_db = bool(payload.get('rebuild_db', False))
+
+        data_cache.clear()
+
+        if rebuild_db:
+            init_db()
+
+        return jsonify({'status': 'success', 'rebuild_db': rebuild_db})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/')
 def serve_frontend():
@@ -186,7 +210,7 @@ def api_stats():
         if len(vsnapshot) > 0:
             vsnapshot_copy = vsnapshot.copy()
             vsnapshot_copy['Date / time'] = pd.to_datetime(vsnapshot_copy['Date / time'], errors='coerce')
-            seven_days_ago = datetime.now() - timedelta(days=7)
+            seven_days_ago = datetime.now() - timedelta(days=cfg.SNAPSHOT_OLD_DAYS)
             old_snapshots = len(vsnapshot_copy[vsnapshot_copy['Date / time'] < seven_days_ago])
         
         source_stats = {
@@ -345,12 +369,6 @@ def api_vm_detail(vm_name):
         'memory': vm_memory
     })
 
-    
-    available_cols = [c for c in columns if c in old_snapshots.columns]
-    result = old_snapshots[available_cols].fillna('').to_dict('records')
-
-    return jsonify(result)
-
 @app.route('/api/reports/zombie-disks')
 def api_zombie_disks():
     """Get zombie disks with database analysis"""
@@ -449,7 +467,6 @@ def api_zombie_disks():
         return jsonify({'disk_count': 0, 'total_wasted_gb': 0, 'vm_count': 0, 'disks': []})
     finally:
         conn.close()
-
 
 @app.route('/api/reports/resource-usage')
 def api_resource_usage():
@@ -625,12 +642,11 @@ def api_rightsizing():
     vinfo['Total disk capacity MiB'] = pd.to_numeric(vinfo['Total disk capacity MiB'], errors='coerce').fillna(0)
     
     # --- 1. RESOURCE OPTIMIZATION ---
-
     # 1.1 Powered Off VMs - Disk Waste (CPU/RAM zaten kullanılmıyor)
     powered_off = vinfo[vinfo['Powerstate'] == 'poweredOff']
     for _, vm in powered_off.iterrows():
         disk_gb = round(vm['Total disk capacity MiB'] / 1024, 2)
-        if disk_gb > 50:  # Only report if significant disk (>50GB)
+        if disk_gb > cfg.POWERED_OFF_DISK_MIN_GB:  # Only report if significant disk
             recommendations.append({
                 'vm': vm['VM'], 'type': 'POWERED_OFF_DISK', 'severity': 'MEDIUM',
                 'reason': f"Kapalı VM {disk_gb} GB disk kullanıyor. Silinebilir veya arşivlenebilir.",
@@ -642,76 +658,76 @@ def api_rightsizing():
     if not vcpu.empty and 'Overall' in vcpu.columns:
         vcpu['Overall'] = pd.to_numeric(vcpu['Overall'], errors='coerce').fillna(0)
         vcpu['CPUs'] = pd.to_numeric(vcpu['CPUs'], errors='coerce').fillna(1)
+        if 'Max' in vcpu.columns:
+            vcpu['Max'] = pd.to_numeric(vcpu['Max'], errors='coerce').fillna(0)
         
         # Load host CPU info
         try:
             vhost = get_combined_data('vHost')
             host_cpu_info = {}
+
             for _, host in vhost.iterrows():
-                host_name = host['Host']
+                host_name = host.get('Host', '')
                 cpu_model = str(host.get('CPU Model', '')).upper()
                 cpu_speed = pd.to_numeric(host.get('Speed', 2000), errors='coerce')
                 if pd.isna(cpu_speed) or cpu_speed == 0:
-                    cpu_speed = 2000  # Fallback
-                
-                # Determine CPU vendor and efficiency factor
-                # AMD generally has better IPC in recent generations
+                    cpu_speed = 2000
+
                 if 'AMD' in cpu_model or 'EPYC' in cpu_model:
                     vendor = 'AMD'
-                    efficiency_factor = 1.15  # AMD EPYC ~15% better IPC 
+                    efficiency_factor = 1.15
                 else:
                     vendor = 'Intel'
-                    efficiency_factor = 1.0  # Intel as baseline
-                
-                host_cpu_info[host_name] = {
-                    'speed': cpu_speed,
-                    'model': cpu_model,
-                    'vendor': vendor,
-                    'efficiency': efficiency_factor
-                }
-        except:
+                    efficiency_factor = 1.0
+
+                if host_name:
+                    host_cpu_info[host_name] = {
+                        'speed': cpu_speed,
+                        'vendor': vendor,
+                        'efficiency': efficiency_factor,
+                    }
+        except Exception as e:
+            print(f"Host CPU info load error: {e}")
             host_cpu_info = {}
-        
-        # Merge with vInfo to get powerstate and Host
+
         vcpu_with_power = vcpu.merge(
-            vinfo[['VM', 'Powerstate', 'Host', 'Source']], 
-            on='VM', how='left', suffixes=('', '_info')
+            vinfo[['VM', 'Powerstate', 'Host', 'Source']],
+            on='VM',
+            how='left',
+            suffixes=('', '_info'),
         )
-        
-        # Only check powered on VMs with >2 vCPU
+
         powered_on_vcpu = vcpu_with_power[
-            (vcpu_with_power['Powerstate'] == 'poweredOn') & 
-            (vcpu_with_power['CPUs'] > 2)
+            (vcpu_with_power['Powerstate'] == 'poweredOn') &
+            (vcpu_with_power['CPUs'] > cfg.CPU_UNDERUTIL_MIN_VCPU_CHECK)
         ]
-        
+
         for _, vm in powered_on_vcpu.iterrows():
-            current_cpu = int(vm['CPUs'])
-            usage_mhz = vm['Overall']
+            current_cpu = int(vm.get('CPUs', 0) or 0)
+            if current_cpu <= 0:
+                continue
+
+            usage_mhz = float(vm.get('Overall', 0) or 0)
             vm_host = vm.get('Host', '')
-            
-            # Get host CPU speed (fallback to 2000 MHz)
+
+            max_capacity_mhz = float(vm.get('Max', 0) or 0)
+
             host_info = host_cpu_info.get(vm_host, {'speed': 2000, 'vendor': 'Intel', 'efficiency': 1.0})
-            cpu_speed_per_core = host_info['speed']
-            efficiency = host_info['efficiency']
-            vendor = host_info['vendor']
-            
-            # Calculate effective capacity
-            # Effective MHz = Speed * Cores * Efficiency Factor
-            max_capacity_mhz = current_cpu * cpu_speed_per_core * efficiency
+            cpu_speed_per_core = float(host_info['speed'])
+            efficiency = float(host_info['efficiency'])
+            vendor = str(host_info['vendor'])
+
+            if max_capacity_mhz <= 0:
+                max_capacity_mhz = current_cpu * cpu_speed_per_core * efficiency
             usage_percent = (usage_mhz / max_capacity_mhz * 100) if max_capacity_mhz > 0 else 0
-            
-            # If using less than 20% capacity and has more than 4 vCPUs
-            # (conservative threshold since RVTools is a snapshot, not continuous monitoring)
-            if usage_percent < 20 and current_cpu > 4:
-                # Calculate recommended vCPUs based on actual usage and host speed
+
+            if usage_percent < cfg.CPU_UNDERUTIL_MAX_USAGE_PCT and current_cpu >= cfg.CPU_UNDERUTIL_MIN_VCPU_RECOMMEND:
                 effective_speed = cpu_speed_per_core * efficiency
                 usage_based_cpus = max(2, int((usage_mhz / effective_speed) + 1))
-                
-                # CONSERVATIVE: Never recommend less than 50% of current capacity
-                # RVTools shows snapshot data, not peak usage throughout the day
-                min_recommended = max(2, current_cpu // 2)
+
+                min_recommended = max(2, int(current_cpu * cfg.CPU_UNDERUTIL_MIN_REDUCTION_FRACTION))
                 needed_cpus = max(usage_based_cpus, min_recommended)
-                
+
                 if needed_cpus < current_cpu:
                     savings = current_cpu - needed_cpus
                     recommendations.append({
@@ -720,7 +736,7 @@ def api_rightsizing():
                         'current_value': current_cpu, 'recommended_value': needed_cpus,
                         'potential_savings': savings, 'resource_type': 'vCPU', 'source': vm.get('Source', '')
                     })
-    
+
     # 1.3 Snapshot heavy VMs & OLD SNAPSHOTS (NEW)
     if not vsnapshot.empty:
         # 1.3.1 Size Check
@@ -731,7 +747,7 @@ def api_rightsizing():
         vinfo_with_snapshots['Snapshot_Count'] = vinfo_with_snapshots['Snapshot_Count'].fillna(0)
         
         heavy_snapshots = vinfo_with_snapshots[
-            (vinfo_with_snapshots['Total_Snapshot_MiB'] > vinfo_with_snapshots['Total disk capacity MiB'] * 0.5) &
+            (vinfo_with_snapshots['Total_Snapshot_MiB'] > vinfo_with_snapshots['Total disk capacity MiB'] * cfg.SNAPSHOT_HEAVY_DISK_RATIO) &
             (vinfo_with_snapshots['Total_Snapshot_MiB'] > 0)
         ]
         for _, vm in heavy_snapshots.iterrows():
@@ -750,7 +766,7 @@ def api_rightsizing():
             # Parse dates
             try:
                 vsnapshot[date_col] = pd.to_datetime(vsnapshot[date_col], errors='coerce')
-                old_threshold = datetime.now() - timedelta(days=7)
+                old_threshold = datetime.now() - timedelta(days=cfg.SNAPSHOT_OLD_DAYS)
                 old_snapshots = vsnapshot[vsnapshot[date_col] < old_threshold]
                 
                 for _, snap in old_snapshots.iterrows():
@@ -1070,13 +1086,13 @@ def api_rightsizing():
                     if capacity > 0:
                         free_pct = (free / capacity) * 100
                         
-                        if free_pct < 5:
+                        if free_pct < cfg.DATASTORE_FREE_CRITICAL_PCT:
                             severity = 'CRITICAL'
                             msg = f"Datastore %{free_pct:.1f} boş. Kritik seviye!"
-                        elif free_pct < 10:
+                        elif free_pct < cfg.DATASTORE_FREE_HIGH_PCT:
                             severity = 'HIGH'
                             msg = f"Datastore %{free_pct:.1f} boş. Düşük alan uyarısı."
-                        elif free_pct < 15:
+                        elif free_pct < cfg.DATASTORE_FREE_WARN_PCT:
                             severity = 'MEDIUM'
                             msg = f"Datastore %{free_pct:.1f} boş. İzlenmeli."
                         else:
@@ -1101,9 +1117,9 @@ def api_rightsizing():
                         if capacity > 0 and provisioned > capacity:
                             overcommit_pct = ((provisioned - capacity) / capacity) * 100
                             
-                            if overcommit_pct > 100:
+                            if overcommit_pct > cfg.DATASTORE_OVERCOMMIT_CRITICAL_PCT:
                                 severity = 'CRITICAL'
-                            elif overcommit_pct > 50:
+                            elif overcommit_pct > cfg.DATASTORE_OVERCOMMIT_HIGH_PCT:
                                 severity = 'HIGH'
                             else:
                                 severity = 'MEDIUM'
@@ -1149,8 +1165,9 @@ def api_rightsizing():
                     
                     if consumed > 0 and provisioned > 0:
                         ratio = provisioned / consumed
-                        
-                        if ratio > 3 and provisioned > 102400:  # >3x and >100GB provisioned
+ 
+                        min_provisioned_mib = int(cfg.STORAGE_OVERPROVISION_MIN_PROVISIONED_GB * 1024)
+                        if ratio > cfg.STORAGE_OVERPROVISION_RATIO and provisioned > min_provisioned_mib:
                             waste_gb = (provisioned - consumed) / 1024
                             recommendations.append({
                                 'vm': vm['VM'], 'type': 'STORAGE_OVERPROVISIONED', 'severity': 'LOW',

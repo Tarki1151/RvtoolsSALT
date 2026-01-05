@@ -319,8 +319,8 @@ const OPTIMIZATION_TYPES = {
         label: 'Düşük CPU Kullanımı',
         icon: 'fa-chart-line',
         color: 'info',
-        desc: 'vCPU kullanımı sürekli %50\'nin altında.',
-        action: 'vCPU sayısını azaltın. Bu, scheduler overhead\'ini düşürür ve performansı artırır.'
+        desc: 'vCPU kullanımı sürekli %50\'nin altında. Fazla vCPU scheduler overhead\'i artırır.',
+        action: 'vCPU sayısını azaltın. NUMA uyumu için: Cores per Socket = Host NUMA core sayısına bölünebilir olmalı (örn: 8 vCPU = 1x8 veya 2x4).'
     },
     'CONSOLIDATE_SNAPSHOTS': {
         label: 'Snapshot Birleştirme',
@@ -354,8 +354,8 @@ const OPTIMIZATION_TYPES = {
         label: 'NUMA Hizalama',
         icon: 'fa-microchip',
         color: 'info',
-        desc: 'Tek sayıda vCPU atanmış. NUMA optimizasyonu bozuluyor.',
-        action: 'vCPU\'yu çift sayıya yuvarlayın veya socket başına core ayarlayın.'
+        desc: 'Tek sayıda vCPU atanmış. NUMA optimizasyonu bozuluyor. Modern CPU\'larda her NUMA node çift sayıda core içerir.',
+        action: 'Örnek: 5 vCPU → 6 vCPU yapın. VM Settings > CPU > Cores per Socket ayarını fiziksel NUMA node core sayısına bölünebilir yapın. Örn: 8 vCPU için 2 socket x 4 core veya 1 socket x 8 core kullanın.'
     },
     'LEGACY_NIC': {
         label: 'Eski Ağ Kartı',

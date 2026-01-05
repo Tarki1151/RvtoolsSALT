@@ -1,0 +1,43 @@
+POWERED_OFF_DISK_MIN_GB = 50
+
+SNAPSHOT_OLD_DAYS = 7
+SNAPSHOT_HEAVY_DISK_RATIO = 0.5
+
+CPU_UNDERUTIL_MAX_USAGE_PCT = 20
+CPU_UNDERUTIL_MIN_VCPU_CHECK = 2
+CPU_UNDERUTIL_MIN_VCPU_RECOMMEND = 4
+CPU_UNDERUTIL_MIN_REDUCTION_FRACTION = 0.5
+
+DATASTORE_FREE_WARN_PCT = 15
+DATASTORE_FREE_HIGH_PCT = 10
+DATASTORE_FREE_CRITICAL_PCT = 5
+
+DATASTORE_OVERCOMMIT_MEDIUM_PCT = 0
+DATASTORE_OVERCOMMIT_HIGH_PCT = 50
+DATASTORE_OVERCOMMIT_CRITICAL_PCT = 100
+
+STORAGE_OVERPROVISION_RATIO = 3
+STORAGE_OVERPROVISION_MIN_PROVISIONED_GB = 100
+
+# ESXi Version -> Max supported VM HW version mapping
+# Format: ((major, minor, update), hw_version)
+ESXI_HW_MAP = [
+    # ESXi 8.0.x
+    ((8, 0, 1), 21),
+    ((8, 0, 0), 20),
+    # ESXi 7.0.x
+    ((7, 0, 2), 19),
+    ((7, 0, 1), 18),
+    ((7, 0, 0), 17),
+    # ESXi 6.7.x
+    ((6, 7, 2), 15),
+    ((6, 7, 0), 14),
+    # ESXi 6.5.x
+    ((6, 5, 0), 13),
+    # ESXi 6.0.x
+    ((6, 0, 0), 11),
+    # ESXi 5.x
+    ((5, 5, 0), 10),
+    ((5, 1, 0), 9),
+    ((5, 0, 0), 8),
+]
