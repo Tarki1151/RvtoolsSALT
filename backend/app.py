@@ -2007,6 +2007,64 @@ def api_export_pdf(report_type):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/host_hardware/<host_name>')
+def api_host_hardware(host_name):
+    """Get detailed hardware info for a specific host (HBAs, NICs, Physical specs, VMKs, Storage)"""
+    conn = sqlite3.connect('rvtools.db')
+    conn.row_factory = sqlite3.Row
+    
+    try:
+        # 1. Get Physical Info from vHost
+        cursor = conn.execute("SELECT * FROM vHost WHERE Host=?", (host_name,))
+        host_info = cursor.fetchone()
+        if not host_info:
+            return jsonify({'error': 'Host not found'}), 404
+        
+        host_dict = dict(host_info)
+        
+        # 2. Get HBAs from vHBA
+        cursor = conn.execute("SELECT * FROM vHBA WHERE Host=?", (host_name,))
+        hbas = [dict(row) for row in cursor.fetchall()]
+        
+        # 3. Get NICs from vNIC
+        cursor = conn.execute("SELECT * FROM vNIC WHERE Host=?", (host_name,))
+        nics = [dict(row) for row in cursor.fetchall()]
+        
+        # 4. Get VMKs from vSC_VMK (NEW)
+        try:
+            cursor = conn.execute("SELECT * FROM vSC_VMK WHERE Host=?", (host_name,))
+            vmks = [dict(row) for row in cursor.fetchall()]
+        except:
+            vmks = []
+
+        # 5. Get Storage Disks from vMultiPath (NEW) - Host'un gördüğü fiziksel diskler
+        try:
+            cursor = conn.execute("SELECT * FROM vMultiPath WHERE Host=?", (host_name,))
+            paths = [dict(row) for row in cursor.fetchall()]
+        except:
+            paths = []
+
+        # 6. Get Switches from vSwitch
+        try:
+            cursor = conn.execute("SELECT * FROM vSwitch WHERE Host=?", (host_name,))
+            switches = [dict(row) for row in cursor.fetchall()]
+        except:
+            switches = []
+
+        return jsonify({
+            'hardware': host_dict,
+            'hbas': hbas,
+            'nics': nics,
+            'vmks': vmks,
+            'storage_paths': paths,
+            'switches': switches
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
 if __name__ == '__main__':
     print("Starting RVTools Visualization Server...")
     print(f"Data directory: {DATA_DIR}")

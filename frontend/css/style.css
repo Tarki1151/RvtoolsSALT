@@ -2675,3 +2675,131 @@ th.sortable.desc i {
         display: none;
     }
 }
+
+/* Host Details Hardware Tabs & Info */
+.hc-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 0 24px;
+    background: rgba(0, 0, 0, 0.2);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.hc-tab-btn {
+    padding: 12px 20px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.hc-tab-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.hc-tab-btn.active {
+    color: var(--accent-blue);
+    border-bottom-color: var(--accent-blue);
+    background: rgba(59, 130, 246, 0.05);
+}
+
+.hc-tab-pane {
+    padding: 24px;
+}
+
+.hc-grid-2 {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+}
+
+.hc-info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+
+.hc-info-item {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.hc-info-item span {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-bottom: 2px;
+}
+
+.hc-property-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.hc-property-list.grid-cols-2 {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+
+.hc-property-list .prop {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-light);
+}
+
+.hc-property-list .prop .key {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.hc-property-list .prop .val {
+    color: var(--text-primary);
+    font-weight: 500;
+    font-size: 0.85rem;
+}
+
+.hc-property-list .prop .val.small {
+    font-size: 0.75rem;
+    font-family: monospace;
+}
+
+.hc-header-status {
+    margin-left: auto;
+}
+
+.fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Responsive adjustments */
+@media (max-width: 992px) {
+
+    .hc-grid-2,
+    .hc-info-grid,
+    .hc-property-list.grid-cols-2 {
+        grid-template-columns: 1fr;
+    }
+}

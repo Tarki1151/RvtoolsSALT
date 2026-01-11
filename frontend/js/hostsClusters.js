@@ -603,38 +603,14 @@ window.hcSelectHostFromTable = function (hostName, source, datacenter, cluster) 
     renderHostDetail(hostName, source, datacenter, cluster);
 };
 
-function renderHostDetail(hostName, sourceName, dcName, clusterName) {
+async function renderHostDetail(hostName, sourceName, dcName, clusterName) {
     const detailView = document.getElementById('hc-detail-view');
     const hostData = hostsClusterData[sourceName]?.datacenters?.[dcName]?.clusters?.[clusterName]?.hosts?.[hostName];
     if (!hostData || !detailView) return;
 
-    // Real usage from ESXi
-    const cpuUsage = hostData.cpu_usage_pct || 0;
-    const ramUsage = hostData.ram_usage_pct || 0;
-    // Overcommit ratios
-    const vcpuRatio = hostData.vcpu_pcore_ratio || 0;
-    const vramRatio = hostData.vram_pram_ratio || 0;
-
-    let vmsTableRows = '';
-    for (const vm of hostData.vms || []) {
-        const statusClass = vm.powerstate === 'poweredOn' ? 'on' : 'off';
-        vmsTableRows += `
-            <tr onclick="window.showVMDetail && window.showVMDetail('${vm.name}', '${sourceName}')">
-                <td>
-                    <span class="status-indicator ${statusClass}"></span>
-                    ${vm.name}
-                </td>
-                <td><span class="status-badge ${statusClass}">${vm.powerstate === 'poweredOn' ? 'On' : 'Off'}</span></td>
-                <td>${vm.vcpu}</td>
-                <td>${formatNumber(vm.ram_gb)} GB</td>
-                <td>${formatNumber(vm.disk_gb)} GB</td>
-                <td class="os-cell">${vm.os || '-'}</td>
-            </tr>
-        `;
-    }
-
+    // Show loading state first
     detailView.innerHTML = `
-        <div class="hc-detail-panel">
+        <div class="hc-detail-panel fade-in">
             <div class="hc-detail-header gradient-teal">
                 <i class="fas fa-server"></i>
                 <div>
@@ -642,101 +618,350 @@ function renderHostDetail(hostName, sourceName, dcName, clusterName) {
                     <p>ESXi Host • ${clusterName}</p>
                 </div>
             </div>
-            
+            <div class="loading-container p-5 text-center">
+                <div class="spinner-border text-teal mb-3"></div>
+                <div class="loading">Sistem verileri ve donanım bileşenleri analiz ediliyor...</div>
+            </div>
+        </div>
+    `;
+
+    try {
+        const hwResponse = await fetch(`/api/host_hardware/${hostName}`);
+        const hwData = await hwResponse.json();
+
+        const hw = hwData.hardware || {};
+        const nics = hwData.nics || [];
+        const hbas = hwData.hbas || [];
+        const vmks = hwData.vmks || [];
+        const storagePaths = hwData.storage_paths || [];
+
+        // Real usage from ESXi
+        const cpuUsage = hostData.cpu_usage_pct || 0;
+        const ramUsage = hostData.ram_usage_pct || 0;
+        const vcpuRatio = hostData.vcpu_pcore_ratio || 0;
+        const vramRatio = hostData.vram_pram_ratio || 0;
+
+        // Render Tabs
+        detailView.innerHTML = `
+            <div class="hc-detail-panel fade-in">
+                <div class="hc-detail-header gradient-teal">
+                    <i class="fas fa-server"></i>
+                    <div>
+                        <h2>${hostName}</h2>
+                        <p>ESXi Host • ${clusterName}</p>
+                    </div>
+                    <div class="hc-header-status">
+                        <span class="status-badge ${hw['in Maintenance Mode'] ? 'off' : 'on'}">
+                            ${hw['in Maintenance Mode'] ? 'Maintenance' : 'Connected'}
+                        </span>
+                    </div>
+                </div>
+                
+                <div class="hc-tabs">
+                    <button class="hc-tab-btn active" onclick="window.hcSwitchTab(this, 'summary')">Özet</button>
+                    <button class="hc-tab-btn" onclick="window.hcSwitchTab(this, 'hardware')">Donanım & BIOS</button>
+                    <button class="hc-tab-btn" onclick="window.hcSwitchTab(this, 'network')">Network (${nics.length + vmks.length})</button>
+                    <button class="hc-tab-btn" onclick="window.hcSwitchTab(this, 'storage')">Storage (${storagePaths.length || hbas.length})</button>
+                    <button class="hc-tab-btn" onclick="window.hcSwitchTab(this, 'vms')">VM'ler (${hostData.total_vms || 0})</button>
+                </div>
+
+                <div id="hc-tab-content">
+                    ${renderSummaryTab(hostData, hw, cpuUsage, ramUsage, vcpuRatio, vramRatio)}
+                </div>
+            </div>
+        `;
+
+        // Store data globally for tab switching
+        window.currentHostContext = {
+            hostData, hw, nics, hbas, vmks, storagePaths, sourceName, clusterName,
+            cpuUsage, ramUsage, vcpuRatio, vramRatio
+        };
+
+    } catch (error) {
+        console.error('Error loading hardware details:', error);
+        // Fallback to basic view if hardware API fails
+        renderBasicHostDetail(hostData, hostName, clusterName, sourceName);
+    }
+}
+
+function renderSummaryTab(hostData, hw, cpuUsage, ramUsage, vcpuRatio, vramRatio) {
+    return `
+        <div class="hc-tab-pane active" id="summary">
             <div class="hc-detail-stats">
                 <div class="hc-mini-stat">
-                    <span class="value">${hostData.total_vms || 0}</span>
-                    <span class="label">Total VMs</span>
+                    <span class="value">${hostData.total_vms || 0} / ${hostData.powered_on || 0}</span>
+                    <span class="label">VM (Toplam / Açık)</span>
                 </div>
                 <div class="hc-mini-stat">
-                    <span class="value">${hostData.powered_on || 0}</span>
-                    <span class="label">Powered On</span>
-                </div>
-                <div class="hc-mini-stat">
-                    <span class="value">${hostData.cpu_sockets || 0}x${hostData.cores_per_socket || 0}</span>
-                    <span class="label">CPU Config</span>
+                    <span class="value">${hw['# CPU'] || 0}x / ${hw['# Cores'] || 0}</span>
+                    <span class="label">CPU Config (Socket/Core)</span>
                 </div>
                 <div class="hc-mini-stat">
                     <span class="value">${formatNumber(hostData.physical_ram_gb || 0)} GB</span>
-                    <span class="label">Physical RAM</span>
+                    <span class="label">Fiziksel RAM</span>
+                </div>
+                <div class="hc-mini-stat">
+                    <span class="value">${hw['ESX Version']?.split(' ').pop() || '-'}</span>
+                    <span class="label">Build No</span>
                 </div>
             </div>
-            
-            <div class="hc-host-info">
-                <div class="hc-info-row">
-                    <span class="label"><i class="fas fa-microchip"></i> CPU Model</span>
-                    <span class="value">${hostData.cpu_model || '-'}</span>
-                </div>
-                <div class="hc-info-row">
-                    <span class="label"><i class="fas fa-code-branch"></i> ESXi Version</span>
-                    <span class="value">${hostData.esxi_version || '-'}</span>
-                </div>
-            </div>
-            
-            <div class="hc-section">
-                <h3><i class="fas fa-chart-bar"></i> Gerçek Kullanım (ESXi Reported)</h3>
-                <div class="hc-utilization-bars">
-                    <div class="hc-util-row">
-                        <span class="hc-util-label"><i class="fas fa-microchip"></i> CPU</span>
-                        <div class="hc-util-bar">
-                            <div class="hc-util-fill ${cpuUsage > 70 ? 'danger' : cpuUsage > 50 ? 'warning' : 'success'}" style="width: ${Math.min(cpuUsage, 100)}%"></div>
+
+            <div class="hc-grid-2">
+                <div class="hc-section">
+                    <h3><i class="fas fa-chart-line"></i> Performans Metrikleri</h3>
+                    <div class="hc-utilization-bars">
+                        <div class="hc-util-row">
+                            <span class="hc-util-label">CPU Usage</span>
+                            <div class="hc-util-bar"><div class="hc-util-fill ${cpuUsage > 80 ? 'danger' : cpuUsage > 60 ? 'warning' : 'success'}" style="width: ${cpuUsage}%"></div></div>
+                            <span class="hc-util-value">${cpuUsage.toFixed(1)}%</span>
                         </div>
-                        <span class="hc-util-value">${cpuUsage.toFixed(1)}%</span>
-                        <span class="hc-util-detail">Aktif Kullanım</span>
-                    </div>
-                    <div class="hc-util-row">
-                        <span class="hc-util-label"><i class="fas fa-memory"></i> RAM</span>
-                        <div class="hc-util-bar">
-                            <div class="hc-util-fill ${ramUsage > 80 ? 'danger' : ramUsage > 60 ? 'warning' : 'success'}" style="width: ${Math.min(ramUsage, 100)}%"></div>
+                        <div class="hc-util-row">
+                            <span class="hc-util-label">RAM Usage</span>
+                            <div class="hc-util-bar"><div class="hc-util-fill ${ramUsage > 85 ? 'danger' : ramUsage > 70 ? 'warning' : 'success'}" style="width: ${ramUsage}%"></div></div>
+                            <span class="hc-util-value">${ramUsage.toFixed(1)}%</span>
                         </div>
-                        <span class="hc-util-value">${ramUsage.toFixed(1)}%</span>
-                        <span class="hc-util-detail">Aktif Kullanım</span>
+                    </div>
+                    <div class="hc-capacity-grid mt-3">
+                        <div class="hc-capacity-item"><span class="label">vCPU:pCore</span><span class="value ${vcpuRatio > 4 ? 'text-warning' : ''}">${vcpuRatio}:1</span></div>
+                        <div class="hc-capacity-item"><span class="label">vRAM:pRAM</span><span class="value ${vramRatio > 1.5 ? 'text-warning' : ''}">${vramRatio}:1</span></div>
+                    </div>
+                </div>
+                <div class="hc-section">
+                    <h3><i class="fas fa-id-card"></i> Sistem Kimlik Bilgileri</h3>
+                    <div class="hc-property-list">
+                        <div class="prop"><span class="key">Vendor</span><span class="val">${hw.Vendor || '-'}</span></div>
+                        <div class="prop"><span class="key">Model</span><span class="val">${hw.Model || '-'}</span></div>
+                        <div class="prop"><span class="key">Serial</span><span class="val">${hw['Serial number'] || '-'}</span></div>
+                        <div class="prop"><span class="key">Domain</span><span class="val">${hw.Domain || '-'}</span></div>
+                        <div class="prop"><span class="key">ESXi Vers.</span><span class="val">${hw['ESX Version'] || '-'}</span></div>
                     </div>
                 </div>
             </div>
-            
-            <div class="hc-section">
-                <h3><i class="fas fa-balance-scale"></i> Overcommit Oranları</h3>
-                <div class="hc-capacity-grid">
-                    <div class="hc-capacity-item">
-                        <span class="label">vCPU:pCore</span>
-                        <span class="value ${vcpuRatio > 4 ? 'text-warning' : ''}">${vcpuRatio}:1</span>
+
+            <div class="hc-section mt-4">
+                <h3><i class="fas fa-key"></i> Lisans ve Operasyonel Bilgiler</h3>
+                <div class="hc-property-list">
+                    <div class="prop"><span class="key">Atanmış Lisans</span><span class="val">${hw['Assigned License(s)'] || 'Lisans Bilgisi Yok'}</span></div>
+                    <div class="prop"><span class="key">Power Policy</span><span class="val">${hw['Host Power Policy'] || '-'}</span></div>
+                    <div class="prop"><span class="key">Boot Zamanı</span><span class="val">${hw['Boot time'] || '-'}</span></div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+window.hcSwitchTab = function (btn, tabId) {
+    // Update button states
+    document.querySelectorAll('.hc-tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    const content = document.getElementById('hc-tab-content');
+    const ctx = window.currentHostContext;
+    if (!ctx) return;
+
+    switch (tabId) {
+        case 'summary': content.innerHTML = renderSummaryTab(ctx.hostData, ctx.hw, ctx.cpuUsage, ctx.ramUsage, ctx.vcpuRatio, ctx.vramRatio); break;
+        case 'hardware': content.innerHTML = renderHardwareTab(ctx.hw); break;
+        case 'network': content.innerHTML = renderNetworkTab(ctx.nics, ctx.vmks); break;
+        case 'storage': content.innerHTML = renderStorageTab(ctx.hbas, ctx.storagePaths); break;
+        case 'vms': content.innerHTML = renderVMsTab(ctx.hostData.vms, ctx.sourceName); break;
+    }
+};
+
+function renderHardwareTab(hw) {
+    return `
+        <div class="hc-tab-pane active fade-in">
+            <div class="hc-grid-2">
+                <div class="hc-section">
+                    <h3><i class="fas fa-microchip"></i> İşlemci (CPU) Detayları</h3>
+                    <div class="hc-property-list">
+                        <div class="prop"><span class="key">Model</span><span class="val">${hw['CPU Model'] || '-'}</span></div>
+                        <div class="prop"><span class="key">Speed</span><span class="val">${hw.Speed || 0} MHz</span></div>
+                        <div class="prop"><span class="key">Socket Sayısı</span><span class="val">${hw['# CPU'] || 0}</span></div>
+                        <div class="prop"><span class="key">Çekirdek/Socket</span><span class="val">${hw['Cores per CPU'] || 0}</span></div>
+                        <div class="prop"><span class="key">Hyperthreading</span><span class="val">${hw['HT Active'] ? 'Aktif' : 'Pasif'}</span></div>
+                        <div class="prop"><span class="key">EVC Mode</span><span class="val">${hw['Current EVC'] || 'N/A'}</span></div>
                     </div>
-                    <div class="hc-capacity-item">
-                        <span class="label">vRAM:pRAM</span>
-                        <span class="value ${vramRatio > 1.5 ? 'text-warning' : ''}">${vramRatio}:1</span>
-                    </div>
-                    <div class="hc-capacity-item">
-                        <span class="label">vCPU Count</span>
-                        <span class="value">${hostData.vcpu_count || 0}</span>
-                    </div>
-                    <div class="hc-capacity-item">
-                        <span class="label">vRAM Allocated</span>
-                        <span class="value">${formatNumber(hostData.vram_gb || 0)} GB</span>
+                </div>
+                <div class="hc-section">
+                    <h3><i class="fas fa-info-circle"></i> BIOS & Anakart</h3>
+                    <div class="hc-property-list">
+                        <div class="prop"><span class="key">BIOS Üretici</span><span class="val">${hw['BIOS Vendor'] || '-'}</span></div>
+                        <div class="prop"><span class="key">BIOS Sürümü</span><span class="val">${hw['BIOS Version'] || '-'}</span></div>
+                        <div class="prop"><span class="key">BIOS Tarihi</span><span class="val">${hw['BIOS Date'] || '-'}</span></div>
+                        <div class="prop"><span class="key">Service Tag</span><span class="val">${hw['Service tag'] || '-'}</span></div>
+                        <div class="prop"><span class="key">UUID</span><span class="val small">${hw.UUID || '-'}</span></div>
                     </div>
                 </div>
             </div>
-            
+            <div class="hc-section mt-4">
+                <h3><i class="fas fa-network-wired"></i> Ağ Servisleri</h3>
+                <div class="hc-property-list grid-cols-2">
+                    <div class="prop"><span class="key">DNS Sunucuları</span><span class="val">${hw['DNS Servers'] || '-'}</span></div>
+                    <div class="prop"><span class="key">NTP Sunucuları</span><span class="val">${hw['NTP Server(s)'] || '-'}</span></div>
+                    <div class="prop"><span class="key">NTPD Durumu</span><span class="val">${hw['NTPD running'] ? 'Çalışıyor' : 'Duru'}</span></div>
+                    <div class="prop"><span class="key">Zaman Dilimi</span><span class="val">${hw['Time Zone Name'] || '-'} (${hw['Time Zone'] || ''})</span></div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function renderNetworkTab(nics, vmks) {
+    let nicRows = nics.length ? nics.map(nic => `
+        <tr>
+            <td><i class="fas fa-ethernet text-primary"></i> <strong>${nic['Network Device'] || '-'}</strong></td>
+            <td><span class="badge ${parseFloat(nic.Speed) >= 10000 ? 'gradient-blue' : 'bg-secondary'}">${nic.Speed > 0 ? (nic.Speed / 1000 + ' Gbps') : (nic.Duplex === 'Link is down!' ? 'Down' : '-')}</span></td>
+            <td>${nic.Duplex || '-'}</td>
+            <td><code>${nic.MAC || '-'}</code></td>
+            <td>${nic.Switch || '-'}</td>
+            <td>${nic.Driver || '-'}</td>
+        </tr>
+    `).join('') : '<tr><td colspan="6" class="text-center text-muted">Fiziksel NIC bulunamadı</td></tr>';
+
+    let vmkRows = vmks.length ? vmks.map(vmk => `
+        <tr>
+            <td><i class="fas fa-network-wired text-teal"></i> <strong>${vmk.Device || '-'}</strong></td>
+            <td>${vmk['Port Group'] || '-'}</td>
+            <td><strong>${vmk['IP Address'] || '-'}</strong></td>
+            <td>${vmk['Subnet mask'] || '-'}</td>
+            <td>${vmk.Gateway || '-'}</td>
+            <td>${vmk.MTU || '-'}</td>
+        </tr>
+    `).join('') : '<tr><td colspan="6" class="text-center text-muted">VMKernel adaptörü bulunamadı</td></tr>';
+
+    return `
+        <div class="hc-tab-pane active fade-in">
             <div class="hc-section">
-                <h3><i class="fas fa-desktop"></i> Virtual Machines (${hostData.total_vms || 0})</h3>
-                <div class="table-container">
-                    <table class="data-table compact">
+                <h3><i class="fas fa-ethernet"></i> Fiziksel Adaptörler (NICs)</h3>
+                <div class="table-container mb-4">
+                    <table class="data-table">
                         <thead>
-                            <tr>
-                                <th>VM Name</th>
-                                <th>Status</th>
-                                <th>vCPU</th>
-                                <th>RAM</th>
-                                <th>Disk</th>
-                                <th>OS</th>
-                            </tr>
+                            <tr><th>Device</th><th>Hız</th><th>Status/Duplex</th><th>MAC</th><th>Switch</th><th>Driver</th></tr>
                         </thead>
-                        <tbody>
-                            ${vmsTableRows || '<tr><td colspan="6" class="empty-state">VM bulunamadı</td></tr>'}
-                        </tbody>
+                        <tbody>${nicRows}</tbody>
                     </table>
                 </div>
             </div>
+            
+            <div class="hc-section">
+                <h3><i class="fas fa-network-wired"></i> VMKernel Adaptörleri (VMKs)</h3>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr><th>Interface</th><th>Port Group</th><th>IP Address</th><th>Mask</th><th>Gateway</th><th>MTU</th></tr>
+                        </thead>
+                        <tbody>${vmkRows}</tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function renderStorageTab(hbas, storagePaths) {
+    if (!hbas.length && !storagePaths.length) return '<div class="p-4 text-center text-muted">Depolama bilgisi bulunamadı</div>';
+
+    let hbaRows = hbas.length ? hbas.map(hba => `
+        <tr>
+            <td><i class="fas fa-microchip text-warning"></i> <strong>${hba.Device || '-'}</strong></td>
+            <td>${hba.Type || '-'}</td>
+            <td>${hba.Model || '-'}</td>
+            <td><span class="status-badge ${hba.Status === 'online' ? 'on' : 'off'}">${hba.Status || '-'}</span></td>
+            <td><code>${hba.WWN || '-'}</code></td>
+            <td>${hba.Driver || '-'}</td>
+        </tr>
+    `).join('') : '<tr><td colspan="6" class="text-center text-muted">HBA kartı bulunamadı</td></tr>';
+
+    let pathRows = storagePaths.length ? storagePaths.map(path => `
+        <tr>
+            <td><i class="fas fa-hdd text-muted"></i> <strong>${path.Vendor || '-'} ${path.Model || ''}</strong></td>
+            <td><span class="badge bg-dark">${path.Policy || '-'}</span></td>
+            <td><span class="text-success">${path['Oper. State'] || '-'}</span></td>
+            <td>${path['Datastore'] || '-'}</td>
+            <td><code class="small" title="${path.Disk}">${path.Disk?.substring(0, 15)}...</code></td>
+            <td>${path['Queue depth'] || '-'}</td>
+        </tr>
+    `).join('') : '<tr><td colspan="6" class="text-center text-muted">Fiziksel depolama yolu (MultiPath) bulunamadı</td></tr>';
+
+    return `
+        <div class="hc-tab-pane active fade-in">
+            <div class="hc-section">
+                <h3><i class="fas fa-microchip"></i> Host Bus Adapters (HBAs)</h3>
+                <div class="table-container mb-4">
+                    <table class="data-table">
+                        <thead>
+                            <tr><th>Device</th><th>Tip</th><th>Model</th><th>Durum</th><th>WWN/Target</th><th>Driver</th></tr>
+                        </thead>
+                        <tbody>${hbaRows}</tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="hc-section">
+                <h3><i class="fas fa-hdd"></i> Fiziksel Diskler & MultiPath</h3>
+                <div class="table-container">
+                    <table class="data-table compact">
+                        <thead>
+                            <tr><th>Storage Model</th><th>Policy</th><th>State</th><th>Datastore</th><th>Identifier</th><th>Queue</th></tr>
+                        </thead>
+                        <tbody>${pathRows}</tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function renderVMsTab(vms, sourceName) {
+    if (!vms || !vms.length) return '<div class="p-4 text-center text-muted">Bu host üzerinde VM bulunmuyor</div>';
+
+    let rows = vms.map(vm => {
+        const statusClass = vm.powerstate === 'poweredOn' ? 'on' : 'off';
+        return `
+            <tr onclick="window.showVMDetail && window.showVMDetail('${vm.name}', '${sourceName}')">
+                <td><span class="status-indicator ${statusClass}"></span> ${vm.name}</td>
+                <td><span class="status-badge ${statusClass}">${vm.powerstate === 'poweredOn' ? 'On' : 'Off'}</span></td>
+                <td>${vm.vcpu}</td>
+                <td>${formatNumber(vm.ram_gb)} GB</td>
+                <td>${formatNumber(vm.disk_gb)} GB</td>
+                <td class="os-cell">${vm.os || '-'}</td>
+            </tr>
+        `;
+    }).join('');
+
+    return `
+        <div class="hc-tab-pane active fade-in">
+            <div class="table-container">
+                <table class="data-table compact">
+                    <thead>
+                        <tr>
+                            <th>VM Name</th>
+                            <th>Status</th>
+                            <th>vCPU</th>
+                            <th>RAM</th>
+                            <th>Disk</th>
+                            <th>OS</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+        </div>
+    `;
+}
+
+function renderBasicHostDetail(hostData, hostName, clusterName, sourceName) {
+    // Original simplified view if hardware fetch fails
+    const detailView = document.getElementById('hc-detail-view');
+    detailView.innerHTML = `
+        <div class="hc-detail-panel">
+            <div class="hc-detail-header gradient-teal">
+                <i class="fas fa-server"></i>
+                <h2>${hostName} (Kısıtlı Görünüm)</h2>
+            </div>
+            <div class="p-4">Donanım bilgileri alınamadı. Sadece temel bilgiler gösteriliyor.</div>
+            ${renderVMsTab(hostData.vms, sourceName)}
         </div>
     `;
 }
