@@ -36,17 +36,9 @@
                 <i class="fas fa-desktop"></i>
                 <span>Virtual Machines</span>
             </a>
-            <a href="#" class="nav-item" data-page="inventory">
-                <i class="fas fa-sitemap"></i>
-                <span>Inventory</span>
-            </a>
             <a href="#" class="nav-item" data-page="hosts-clusters">
                 <i class="fas fa-cubes"></i>
                 <span>Hosts & Clusters</span>
-            </a>
-            <a href="#" class="nav-item" data-page="hosts">
-                <i class="fas fa-hdd"></i>
-                <span>Hosts</span>
             </a>
             <a href="#" class="nav-item" data-page="datastores">
                 <i class="fas fa-database"></i>
@@ -333,27 +325,6 @@
                 </div>
             </section>
 
-            <!-- Inventory Page -->
-            <section id="page-inventory" class="page">
-                <div class="inventory-container">
-                    <div class="inventory-sidebar">
-                        <div class="inventory-search">
-                            <input type="text" id="inventory-search-input" placeholder="Hiyerarşide ara...">
-                        </div>
-                        <div id="inventory-tree" class="inventory-tree">
-                            <!-- Tree populated via JS -->
-                        </div>
-                    </div>
-                    <div class="inventory-content">
-                        <div id="inventory-detail-view">
-                            <div class="empty-state">
-                                <i class="fas fa-mouse-pointer"></i>
-                                <p>Detayları görmek için soldan bir öğe seçin</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
 
             <!-- Hosts & Clusters Page (vCenter Style) -->
             <section id="page-hosts-clusters" class="page">
@@ -378,26 +349,6 @@
                 </div>
             </section>
 
-            <!-- Hosts Page -->
-            <section id="page-hosts" class="page">
-                <div class="table-container">
-                    <table class="data-table" id="hosts-table">
-                        <thead>
-                            <tr>
-                                <th class="sortable" data-key="Host">Host <i class="fas fa-sort"></i></th>
-                                <th class="sortable" data-key="Datacenter">Datacenter <i class="fas fa-sort"></i></th>
-                                <th class="sortable" data-key="Cluster">Cluster <i class="fas fa-sort"></i></th>
-                                <th class="sortable" data-key="CPU Model">CPU Model <i class="fas fa-sort"></i></th>
-                                <th class="sortable" data-key="# CPU">CPU Sockets <i class="fas fa-sort"></i></th>
-                                <th class="sortable" data-key="Cores per CPU">Cores <i class="fas fa-sort"></i></th>
-                                <th class="sortable" data-key="Memory">Memory (GB) <i class="fas fa-sort"></i></th>
-                                <th class="sortable" data-key="Source">Kaynak <i class="fas fa-sort"></i></th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
-                </div>
-            </section>
 
             <!-- Datastores Page -->
             <section id="page-datastores" class="page">

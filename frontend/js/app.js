@@ -6,12 +6,8 @@ import { loadVMs } from './vms.js';
 import { loadReports, loadOldSnapshots, loadZombieDisks, loadResourceUsage } from './reports.js';
 import { fetchSources } from './api.js';
 import { showVMDetail } from './vmDetail.js';
-import { toggleTree, loadInventoryDetail } from './inventory.js';
-
 // Make functions globally accessible for onclick handlers
 window.showVMDetail = showVMDetail;
-window.toggleTree = toggleTree;
-window.loadInventoryDetail = loadInventoryDetail;
 
 // Initialize Application
 document.addEventListener('DOMContentLoaded', async () => {
@@ -55,9 +51,7 @@ function initNavigation() {
                 dashboard: 'Dashboard',
                 vms: 'Virtual Machines',
                 reports: 'Reports',
-                inventory: 'Inventory',
                 'hosts-clusters': 'Hosts & Clusters',
-                hosts: 'Hosts',
                 datastores: 'Datastores',
                 optimization: 'Optimization'
             };
@@ -80,20 +74,12 @@ function initNavigation() {
                 case 'reports':
                     loadReports();
                     break;
-                case 'inventory':
-                    const { loadInventory } = await import('./inventory.js');
-                    loadInventory();
-                    break;
                 case 'hosts-clusters':
                     const { loadHostsClusters } = await import('./hostsClusters.js');
                     loadHostsClusters();
                     break;
-                case 'hosts':
-                    const { loadHosts } = await import('./hosts.js');
-                    loadHosts();
-                    break;
                 case 'datastores':
-                    const { loadDatastores } = await import('./hosts.js');
+                    const { loadDatastores } = await import('./datastores.js');
                     loadDatastores();
                     break;
                 case 'optimization':

@@ -51,12 +51,6 @@ export async function fetchReserved() {
     return response.json();
 }
 
-export async function fetchHosts(source = null) {
-    let url = `${API_BASE}/hosts`;
-    if (source) url += `?source=${source}`;
-    const response = await fetch(url);
-    return response.json();
-}
 
 export async function fetchDatastores(source = null) {
     let url = `${API_BASE}/datastores`;
@@ -65,10 +59,6 @@ export async function fetchDatastores(source = null) {
     return response.json();
 }
 
-export async function fetchInventory() {
-    const response = await fetch(`${API_BASE}/inventory`);
-    return response.json();
-}
 
 export async function fetchSources() {
     const response = await fetch(`${API_BASE}/sources`);
@@ -95,14 +85,6 @@ export async function fetchEfficiencyScore() {
     return response.json();
 }
 
-export async function fetchInventoryDetail(params = {}) {
-    let url = `${API_BASE}/inventory/detail?`;
-    Object.keys(params).forEach(key => {
-        if (params[key]) url += `${key}=${encodeURIComponent(params[key])}&`;
-    });
-    const response = await fetch(url);
-    return response.json();
-}
 
 export async function fetchNote(targetType, targetName) {
     const url = `${API_BASE}/notes?target_type=${encodeURIComponent(targetType)}&target_name=${encodeURIComponent(targetName)}`;

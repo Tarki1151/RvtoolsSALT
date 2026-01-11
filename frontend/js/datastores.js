@@ -1,34 +1,8 @@
 // Hosts and Datastores Module
-import { fetchHosts, fetchDatastores } from './api.js';
+import { fetchDatastores } from './api.js';
 import { currentSource } from './config.js';
 import { formatNumber } from './utils.js';
 
-export async function loadHosts() {
-    try {
-        const hosts = await fetchHosts(currentSource);
-        const tbody = document.querySelector('#hosts-table tbody');
-
-        if (hosts.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" class="empty-state"><i class="fas fa-server"></i><p>Host bulunamadı</p></td></tr>';
-            return;
-        }
-
-        tbody.innerHTML = hosts.map(host => `
-            <tr>
-                <td><strong>${host.Host}</strong></td>
-                <td>${host.Datacenter || '-'}</td>
-                <td>${host.Cluster || '-'}</td>
-                <td>${host['CPU Model'] || '-'}</td>
-                <td>${host['# CPU'] || '-'}</td>
-                <td>${host['Cores per CPU'] || '-'}</td>
-                <td>${formatNumber(host.Memory)}</td>
-                <td>${host.Source || '-'}</td>
-            </tr>
-        `).join('');
-    } catch (error) {
-        console.error('Error loading hosts:', error);
-    }
-}
 
 export async function loadDatastores() {
     try {

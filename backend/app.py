@@ -1156,7 +1156,7 @@ def api_rightsizing():
                             recommendations.append({
                                 'vm': ds['Name'], 'type': 'DATASTORE_OVERCOMMIT', 'severity': severity,
                                 'reason': f"Provisioned ({provisioned/1024:.0f} GB) > Capacity ({capacity/1024:.0f} GB). %{overcommit_pct:.0f} overcommit.",
-                                'current_value': f"{provisioned/1024:.0f} GB", 'recommended_value': f"<{capacity/1024:.0f} GB",
+                                'current_value': f"{provisioned/1024:.0f} GB prov", 'recommended_value': f"<{capacity/1024:.0f} GB",
                                 'potential_savings': 0, 'resource_type': 'Storage',
                                 'source': ds.get('Source', ''), 'cluster': ds.get('Cluster name', '-')
                             })
@@ -1537,18 +1537,6 @@ def api_cost_estimation():
         print(f"Error in cost estimation: {e}")
         return jsonify({'cpu_overcommit': 0, 'mem_overcommit': 0, 'total_vcpu': 0, 'total_physical_cores': 0, 'total_allocated_ram_gb': 0, 'total_physical_ram_gb': 0, 'host_pressure': []})
 
-@app.route('/api/hosts')
-def api_hosts():
-    """Get list of all hosts"""
-    source = request.args.get('source', None)
-    
-    if source:
-        vhost = load_excel_data(f"{source}.xlsx", 'vHost').copy()
-        vhost['Source'] = source
-    else:
-        vhost = get_combined_data('vHost')
-    
-    return jsonify(vhost.fillna('').to_dict('records'))
 
 @app.route('/api/datastores')
 def api_datastores():
@@ -1563,81 +1551,6 @@ def api_datastores():
     
     return jsonify(vdatastore.fillna('').to_dict('records'))
 
-@app.route('/api/inventory/detail')
-def api_inventory_detail():
-    """Get detailed VM resource metrics for inventory selection"""
-    level = request.args.get('level')  # 'datacenter', 'cluster', 'host'
-    source = request.args.get('source')
-    datacenter = request.args.get('datacenter')
-    cluster = request.args.get('cluster')
-    host = request.args.get('host')
-    
-    try:
-        vinfo = get_combined_data('vInfo').copy()
-        vpartition = get_combined_data('vPartition')
-        vsnapshot = get_combined_data('vSnapshot')
-        
-        # Filter VMs based on selection level
-        if source:
-            vinfo = vinfo[vinfo['Source'] == source]
-        if datacenter and datacenter != 'Unknown Datacenter':
-            vinfo = vinfo[vinfo['Datacenter'] == datacenter]
-        if cluster and cluster != 'Unknown Cluster':
-            vinfo = vinfo[vinfo['Cluster'] == cluster]
-        if host and host != 'Unknown Host':
-            vinfo = vinfo[vinfo['Host'] == host]
-        
-        # Clean numeric columns
-        vinfo['CPUs'] = pd.to_numeric(vinfo['CPUs'], errors='coerce').fillna(0)
-        vinfo['Memory'] = pd.to_numeric(vinfo['Memory'], errors='coerce').fillna(0)
-        vinfo['Total disk capacity MiB'] = pd.to_numeric(vinfo['Total disk capacity MiB'], errors='coerce').fillna(0)
-        
-        # Calculate disk usage from vPartition
-        disk_usage = vpartition.groupby('VM')['Consumed MiB'].sum().reset_index()
-        disk_usage.columns = ['VM', 'Used_Disk_MiB']
-        
-        # Calculate snapshot info from vSnapshot
-        snapshot_info = vsnapshot.groupby('VM').agg({
-            'Name': 'count',
-            'Size MiB (total)': 'sum'
-        }).reset_index()
-        snapshot_info.columns = ['VM', 'Snapshot_Count', 'Snapshot_Size_MiB']
-        
-        # Merge data
-        vinfo = vinfo.merge(disk_usage, on='VM', how='left')
-        vinfo = vinfo.merge(snapshot_info, on='VM', how='left')
-        
-        vinfo['Used_Disk_MiB'] = vinfo['Used_Disk_MiB'].fillna(0)
-        vinfo['Snapshot_Count'] = vinfo['Snapshot_Count'].fillna(0).astype(int)
-        vinfo['Snapshot_Size_MiB'] = vinfo['Snapshot_Size_MiB'].fillna(0)
-        
-        # Select columns for response
-        result = []
-        for _, vm in vinfo.iterrows():
-            result.append({
-                'name': vm['VM'],
-                'powerstate': vm.get('Powerstate', 'Unknown'),
-                'cpu_allocated': int(vm['CPUs']),
-                'cpu_used': None,  # RVTools doesn't provide CPU usage %
-                'ram_allocated_mb': int(vm['Memory']),
-                'ram_used_mb': None,  # RVTools doesn't provide RAM usage %
-                'disk_allocated_gb': round(vm['Total disk capacity MiB'] / 1024, 2),
-                'disk_used_gb': round(vm['Used_Disk_MiB'] / 1024, 2),
-                'snapshot_count': int(vm['Snapshot_Count']),
-                'snapshot_size_gb': round(vm['Snapshot_Size_MiB'] / 1024, 2),
-                'os': vm.get('OS according to the configuration file', ''),
-                'source': vm.get('Source', '')
-            })
-        
-        return jsonify({
-            'level': level,
-            'vm_count': len(result),
-            'vms': result
-        })
-        
-    except Exception as e:
-        print(f"Error in inventory detail: {e}")
-        return jsonify({'error': str(e), 'vms': []})
 
 @app.route('/api/hosts-clusters')
 def api_hosts_clusters():
