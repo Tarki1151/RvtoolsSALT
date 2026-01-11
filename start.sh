@@ -56,9 +56,12 @@ stop_server() {
 }
 
 show_logs() {
-    echo -e "${BLUE}=== Last 30 lines of server.log ===${NC}"
-    tail -30 "$LOG_FILE" 2>/dev/null || echo "No logs yet"
-    echo -e "${BLUE}====================================${NC}"
+    echo -e "${BLUE}=== Live Logs (Press Ctrl+C to return to menu) ===${NC}"
+    # Use subshell with local trap to allow returning to menu after Ctrl+C
+    (
+        trap 'echo -e "\n${YELLOW}Returning to menu...${NC}"; exit 0' INT
+        tail -f "$LOG_FILE"
+    )
 }
 
 open_browser() {
@@ -73,7 +76,7 @@ show_menu() {
     echo -e "${BLUE}╠════════════════════════════════╣${NC}"
     echo -e "${BLUE}║${NC} 1. [r] Restart Server          ${BLUE}║${NC}"
     echo -e "${BLUE}║${NC} 2. [s] Stop Server             ${BLUE}║${NC}"
-    echo -e "${BLUE}║${NC} 3. [l] View Logs               ${BLUE}║${NC}"
+    echo -e "${BLUE}║${NC} 3. [l] Monitor Logs (Live)     ${BLUE}║${NC}"
     echo -e "${BLUE}║${NC} 4. [o] Open Browser            ${BLUE}║${NC}"
     echo -e "${BLUE}║${NC} 5. [q] Quit                    ${BLUE}║${NC}"
     echo -e "${BLUE}╚════════════════════════════════╝${NC}"

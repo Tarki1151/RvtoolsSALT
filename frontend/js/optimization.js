@@ -3,9 +3,12 @@ import { fetchRightSizing, fetchDiskWaste, fetchZombieDisks } from './api.js';
 import { formatNumber, truncateText, escapeHtml } from './utils.js';
 
 // Cache for filtering and PDF export
+let allPools = [];
 let rightSizingData = [];
 let diskWasteData = [];
 let zombieDisksData = [];
+let selectedType = '';
+let selectedClusters = new Set();
 
 export async function loadOptimization() {
     // Setup PDF dropdown toggle
@@ -52,11 +55,24 @@ function setupTooltips() {
         if (!info) return;
 
         // Build rich tooltip content
+        let vmInfoHtml = '';
+        const row = badge ? badge.closest('tr') : e.target.closest('#rightsizing-table tbody tr');
+        if (row && row.dataset.vm) {
+            vmInfoHtml = `
+                <div class="tooltip-vm-context">
+                    <i class="fas fa-info-circle"></i>
+                    <span><strong>DC:</strong> ${row.dataset.dc || '-'}</span> | 
+                    <span><strong>Cluster:</strong> ${row.dataset.cluster || '-'}</span>
+                </div>
+            `;
+        }
+
         tooltip.innerHTML = `
             <div class="tooltip-title">
                 <i class="fas ${info.icon}"></i>
                 ${info.label}
             </div>
+            ${vmInfoHtml}
             <div class="tooltip-desc">${info.desc}</div>
             <div class="tooltip-action">
                 <strong>📋 Öneri:</strong> ${info.action}
@@ -163,12 +179,98 @@ async function loadRightSizing() {
         // Cache for filtering
         rightSizingData = data.recommendations || [];
 
+        renderHierarchyFilter();
+
         document.getElementById('rightsizing-count').textContent = data.total_recommendations || 0;
 
-        renderRightSizingTable(rightSizingData);
+        applyAllFilters();
     } catch (error) {
         console.error('Error loading rightsizing:', error);
     }
+}
+
+function renderHierarchyFilter() {
+    const container = document.getElementById('opt-hierarchy-filter');
+    if (!container) return;
+
+    const geoMap = {};
+    rightSizingData.forEach(rec => {
+        const dc = rec.datacenter || 'Unknown DC';
+        const cluster = rec.cluster || 'Unknown Cluster';
+        if (!geoMap[dc]) geoMap[dc] = new Set();
+        geoMap[dc].add(cluster);
+    });
+
+    let html = '';
+    const dcs = Object.keys(geoMap).sort();
+
+    // Default: Select all clusters initially
+    selectedClusters.clear();
+    dcs.forEach(dc => {
+        geoMap[dc].forEach(cluster => selectedClusters.add(cluster));
+    });
+
+    dcs.forEach(dc => {
+        const clusters = Array.from(geoMap[dc]).sort();
+        html += `
+            <div class="hierarchy-item">
+                <div class="dc-item">
+                    <input type="checkbox" id="dc-${dc}" checked onclick="window.toggleOptDC('${dc}', this)">
+                    <label for="dc-${dc}">${dc}</label>
+                </div>
+                <div class="cluster-list" id="clusters-of-${dc}">
+                    ${clusters.map(cluster => `
+                        <div class="cluster-item">
+                            <input type="checkbox" name="opt-cluster" value="${cluster}" checked 
+                                   data-dc="${dc}" onclick="window.toggleOptCluster(this)">
+                            <label title="${cluster}">${cluster}</label>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html || '<div class="p-2 text-muted small">Konum verisi yok.</div>';
+}
+
+window.toggleOptDC = (dc, checkbox) => {
+    const clusterChecks = document.querySelectorAll(`.cluster-list#clusters-of-${dc.replace(/'/g, "\\'")} input[type="checkbox"]`);
+    clusterChecks.forEach(cb => {
+        cb.checked = checkbox.checked;
+        if (checkbox.checked) selectedClusters.add(cb.value);
+        else selectedClusters.delete(cb.value);
+    });
+    applyAllFilters();
+};
+
+window.toggleOptCluster = (checkbox) => {
+    if (checkbox.checked) selectedClusters.add(checkbox.value);
+    else selectedClusters.delete(checkbox.value);
+
+    // Update DC parent if all clusters are unchecked or any unchecked
+    const dc = checkbox.dataset.dc;
+    const dcCheck = document.getElementById(`dc-${dc}`);
+    const dcClusters = document.querySelectorAll(`.cluster-item input[data-dc="${dc}"]`);
+    const allChecked = Array.from(dcClusters).every(cb => cb.checked);
+    if (dcCheck) dcCheck.checked = allChecked;
+
+    applyAllFilters();
+};
+
+function applyAllFilters() {
+    let filtered = rightSizingData;
+
+    // Filter by Type
+    if (selectedType) {
+        filtered = filtered.filter(rec => rec.type === selectedType);
+    }
+
+    // Filter by Cluster
+    filtered = filtered.filter(rec => selectedClusters.has(rec.cluster || 'Unknown Cluster'));
+
+    document.getElementById('rightsizing-count').textContent = filtered.length;
+    renderRightSizingTable(filtered);
 }
 
 function renderRightSizingTable(recommendations) {
@@ -186,8 +288,10 @@ function renderRightSizingTable(recommendations) {
         else if (rec.severity === 'LOW') severityClass = 'badge-success';
 
         return `
-            <tr data-type="${rec.type}">
+            <tr data-type="${rec.type}" data-vm="${rec.vm}" data-cluster="${rec.cluster || '-'}" data-dc="${rec.datacenter || '-'}" 
+                onclick="window.showVMDetail('${escapeHtml(rec.vm)}', '${rec.source}')" style="cursor: pointer;">
                 <td><strong>${rec.vm}</strong></td>
+                <td><small class="text-muted">${rec.host || '-'}</small></td>
                 <td><span class="badge ${severityClass}">${rec.severity}</span></td>
                 <td>${formatType(rec.type)}</td>
                 <td>${rec.reason}</td>
@@ -201,6 +305,8 @@ function renderRightSizingTable(recommendations) {
 
 // Filter function for quick-nav buttons
 window.filterRightSizing = function (type) {
+    selectedType = type;
+
     // Scroll to rightsizing section
     document.getElementById('opt-rightsizing').scrollIntoView({ behavior: 'smooth' });
 
@@ -214,17 +320,7 @@ window.filterRightSizing = function (type) {
         }
     });
 
-    // Filter data
-    let filtered = rightSizingData;
-    if (type) {
-        filtered = rightSizingData.filter(rec => rec.type === type);
-    }
-
-    // Update count badge
-    document.getElementById('rightsizing-count').textContent = filtered.length;
-
-    // Render filtered table
-    renderRightSizingTable(filtered);
+    applyAllFilters();
 };
 
 async function loadDiskWaste() {
@@ -244,7 +340,7 @@ async function loadDiskWaste() {
         }
 
         tbody.innerHTML = data.disks.map(disk => `
-            <tr>
+            <tr onclick="window.showVMDetail('${escapeHtml(disk.vm)}', '${disk.source}')" style="cursor: pointer;">
                 <td><strong>${disk.vm}</strong></td>
                 <td>${disk.disk_name}</td>
                 <td>${formatWasteType(disk.waste_type)}</td>
@@ -275,7 +371,7 @@ async function loadZombieDisks() {
         }
 
         tbody.innerHTML = data.disks.map(disk => `
-            <tr>
+            <tr ${disk.VM && disk.VM !== 'Bilinmiyor' ? `onclick="window.showVMDetail('${escapeHtml(disk.VM)}', '${disk.Source}')" style="cursor: pointer;"` : ''}>
                 <td><strong>${disk.VM || 'Bilinmiyor'}</strong></td>
                 <td>${disk.Cluster || '-'}</td>
                 <td>${disk.Datastore || 'Unknown'}</td>

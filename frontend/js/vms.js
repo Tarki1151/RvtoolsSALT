@@ -45,7 +45,7 @@ function renderVMsTable(vms) {
     }
 
     tbody.innerHTML = vms.map(vm => `
-        <tr>
+        <tr onclick="window.showVMDetail('${escapeHtml(vm.VM)}', '${vm.Source}')" style="cursor: pointer;">
             <td><strong>${vm.VM}</strong></td>
             <td>
                 <span class="status-badge ${vm.Powerstate === 'poweredOn' ? 'on' : 'off'}">
@@ -59,11 +59,6 @@ function renderVMsTable(vms) {
             <td>${truncateText(vm['OS according to the configuration file'], 30)}</td>
             <td>${truncateText(vm.Host, 25)}</td>
             <td>${vm.Source || '-'}</td>
-            <td>
-                <button class="btn-action" onclick="window.showVMDetail('${escapeHtml(vm.VM)}', '${vm.Source}')">
-                    <i class="fas fa-eye"></i> Detay
-                </button>
-            </td>
         </tr>
     `).join('');
 }

@@ -11,6 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <!-- PDF Export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.1/jspdf.plugin.autotable.min.js"></script>
@@ -39,6 +40,10 @@
             <a href="#" class="nav-item" data-page="hosts-clusters">
                 <i class="fas fa-cubes"></i>
                 <span>Hosts & Clusters</span>
+            </a>
+            <a href="#" class="nav-item" data-page="risks">
+                <i class="fas fa-biohazard"></i>
+                <span>Riskler</span>
             </a>
             <a href="#" class="nav-item" data-page="datastores">
                 <i class="fas fa-database"></i>
@@ -315,7 +320,6 @@
                                         class="fas fa-sort"></i></th>
                                 <th class="sortable" data-key="Host">Host <i class="fas fa-sort"></i></th>
                                 <th class="sortable" data-key="Source">Kaynak <i class="fas fa-sort"></i></th>
-                                <th>İşlem</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -350,21 +354,73 @@
             </section>
 
 
-            <!-- Datastores Page -->
-            <section id="page-datastores" class="page">
+
+
+            <!-- Risks Page -->
+            <section id="page-risks" class="page">
+                <div class="report-summary" style="margin-bottom: 24px;">
+                    <div class="summary-card gradient-red">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <div>
+                            <h3 id="risk-stat-critical">0</h3>
+                            <p>Kritik Risk</p>
+                        </div>
+                    </div>
+                    <div class="summary-card gradient-orange">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <div>
+                            <h3 id="risk-stat-high">0</h3>
+                            <p>Yüksek Risk</p>
+                        </div>
+                    </div>
+                    <div class="summary-card gradient-blue">
+                        <i class="fas fa-info-circle"></i>
+                        <div>
+                            <h3 id="risk-stat-medium">0</h3>
+                            <p>Orta Risk</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ai-insight-panel mb-4" id="risk-ai-panel">
+                    <div class="ai-header">
+                        <i class="fas fa-robot"></i>
+                        <span>AI Altyapı Risk Analizi (Grok-4)</span>
+                    </div>
+                    <div class="ai-content" id="risk-ai-content">
+                        Analiz hazırlanıyor...
+                    </div>
+                </div>
+
+                <!-- Risk Category Tabs -->
+                <div class="risk-tabs mb-4">
+                    <button class="risk-tab-btn active" data-risk-cat="all">
+                        <i class="fas fa-list"></i> Tümü <span class="badge" id="risk-count-all">0</span>
+                    </button>
+                    <button class="risk-tab-btn" data-risk-cat="Software">
+                        <i class="fas fa-code"></i> Yazılım <span class="badge" id="risk-count-soft">0</span>
+                    </button>
+                    <button class="risk-tab-btn" data-risk-cat="Hardware">
+                        <i class="fas fa-microchip"></i> Donanım <span class="badge" id="risk-count-hard">0</span>
+                    </button>
+                    <button class="risk-tab-btn" data-risk-cat="Hypervisor">
+                        <i class="fas fa-layer-group"></i> Hypervisor <span class="badge" id="risk-count-hyp">0</span>
+                    </button>
+                    <button class="risk-tab-btn" data-risk-cat="Operation">
+                        <i class="fas fa-cogs"></i> Operasyon <span class="badge" id="risk-count-ops">0</span>
+                    </button>
+                </div>
+
                 <div class="table-container">
-                    <table class="data-table" id="datastores-table">
+                    <table class="data-table risks-data-table" id="risks-table">
                         <thead>
                             <tr>
-                                <th class="sortable" data-key="Name">Datastore <i class="fas fa-sort"></i></th>
-                                <th class="sortable" data-key="Type">Type <i class="fas fa-sort"></i></th>
-                                <th class="sortable" data-key="Capacity MiB">Capacity (GB) <i class="fas fa-sort"></i>
-                                </th>
-                                <th class="sortable" data-key="Free MiB">Free (GB) <i class="fas fa-sort"></i></th>
-                                <th class="sortable">Free % <i class="fas fa-sort"></i></th>
-                                <th class="sortable" data-key="# VMs">VMs <i class="fas fa-sort"></i></th>
-                                <th class="sortable" data-key="# Hosts">Hosts <i class="fas fa-sort"></i></th>
-                                <th class="sortable" data-key="Source">Kaynak <i class="fas fa-sort"></i></th>
+                                <th style="width: 15%;">Hedef</th>
+                                <th style="width: 10%;">Kategori</th>
+                                <th style="width: 10%;">Önem</th>
+                                <th style="width: 40%;">Risk Açıklaması</th>
+                                <th style="width: 15%;">Öneri</th>
+                                <th style="width: 10%;">Kaynak</th>
                             </tr>
                         </thead>
                         <tbody></tbody>
@@ -372,189 +428,283 @@
                 </div>
             </section>
 
+            <!-- Datastores Page -->
+            <section id="page-datastores" class="page">
+                <div class="hc-container">
+                    <div class="hc-sidebar">
+                        <div class="hc-toolbar mb-2">
+                            <div class="hc-search">
+                                <i class="fas fa-search"></i>
+                                <input type="text" id="ds-search-input" placeholder="Datastore ara...">
+                            </div>
+                        </div>
+                        <div class="hc-actions mb-3 px-3">
+                            <button id="btn-toggle-local-ds" class="btn-action-outline w-100">
+                                <i class="fas fa-filter"></i> <span>Lokal Diskleri Gizle</span>
+                            </button>
+                        </div>
+                        <div id="ds-tree" class="hc-tree">
+                            <!-- Populated via JS -->
+                        </div>
+                    </div>
+                    <div class="hc-content">
+                        <div id="ds-detail-view">
+                            <!-- Summary stats -->
+                            <div class="report-summary mb-4">
+                                <div class="summary-card gradient-blue">
+                                    <i class="fas fa-database"></i>
+                                    <div>
+                                        <h3 id="ds-stat-count">0</h3>
+                                        <p>Toplam Datastore</p>
+                                    </div>
+                                </div>
+                                <div class="summary-card gradient-purple">
+                                    <i class="fas fa-hdd"></i>
+                                    <div>
+                                        <h3 id="ds-stat-capacity">0 TB</h3>
+                                        <p>Toplam Kapasite</p>
+                                    </div>
+                                </div>
+                                <div class="summary-card gradient-green">
+                                    <i class="fas fa-chart-line"></i>
+                                    <div>
+                                        <h3 id="ds-stat-free">0 TB</h3>
+                                        <p>Toplam Boş Alan</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="table-container">
+                                <table class="data-table" id="datastores-table">
+                                    <thead>
+                                        <tr>
+                                            <th class="sortable" data-sort="Name">Datastore Adı <i
+                                                    class="fas fa-sort"></i></th>
+                                            <th class="sortable" data-sort="Type">Tip <i class="fas fa-sort"></i></th>
+                                            <th class="sortable" data-sort="Vendor">Fiziksel Depolama <i
+                                                    class="fas fa-sort"></i></th>
+                                            <th class="sortable" data-sort="Capacity MiB">Kapasite <i
+                                                    class="fas fa-sort"></i></th>
+                                            <th class="sortable" data-sort="Free MiB">Boş Alan <i
+                                                    class="fas fa-sort"></i></th>
+                                            <th class="sortable" data-sort="usedPct">Doluluk % <i
+                                                    class="fas fa-sort"></i></th>
+                                            <th class="sortable" data-sort="# VMs">VM Sayısı <i class="fas fa-sort"></i>
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <!-- Optimization Page -->
             <section id="page-optimization" class="page">
-
-                <!-- Quick Navigation -->
-                <div class="quick-nav">
-                    <button onclick="window.scrollTo({top: 0, behavior: 'smooth'}); window.filterRightSizing('');"
-                        class="nav-pill active">
-                        <i class="fas fa-home"></i> Tümü
-                    </button>
-                    <button onclick="window.filterRightSizing('POWERED_OFF_DISK')" class="nav-pill nav-pill-warning">
-                        <i class="fas fa-power-off"></i> Kapalı VM
-                    </button>
-                    <button onclick="window.filterRightSizing('CPU_UNDERUTILIZED')" class="nav-pill">
-                        <i class="fas fa-chart-line"></i> Düşük CPU
-                    </button>
-                    <button onclick="window.filterRightSizing('EOL_OS')" class="nav-pill nav-pill-danger">
-                        <i class="fas fa-skull-crossbones"></i> EOL OS
-                    </button>
-                    <button onclick="window.filterRightSizing('OLD_HW_VERSION')" class="nav-pill nav-pill-warning">
-                        <i class="fas fa-microchip"></i> Eski HW
-                    </button>
-                    <button onclick="window.filterRightSizing('VM_TOOLS')" class="nav-pill nav-pill-danger">
-                        <i class="fas fa-tools"></i> VM Tools
-                    </button>
-                    <button onclick="window.filterRightSizing('CPU_LIMIT')" class="nav-pill nav-pill-warning">
-                        <i class="fas fa-tachometer-alt"></i> CPU Limit
-                    </button>
-                    <button onclick="window.filterRightSizing('OLD_SNAPSHOT')" class="nav-pill nav-pill-danger">
-                        <i class="fas fa-clock"></i> Eski Snapshot
-                    </button>
-                    <button onclick="window.filterRightSizing('LEGACY_NIC')" class="nav-pill">
-                        <i class="fas fa-network-wired"></i> Eski NIC
-                    </button>
-                    <button onclick="document.getElementById('opt-diskwaste').scrollIntoView({behavior: 'smooth'})"
-                        class="nav-pill">
-                        <i class="fas fa-trash-alt"></i> Disk Waste
-                    </button>
-                    <button onclick="document.getElementById('opt-zombies').scrollIntoView({behavior: 'smooth'})"
-                        class="nav-pill">
-                        <i class="fas fa-ghost"></i> Zombies
-                    </button>
-                </div>
-
-                <!-- quick-nav is here -->
-
-                <!-- Resource Savings Summary -->
-                <div class="savings-dashboard">
-                    <div class="savings-card gradient-blue">
-                        <div class="savings-icon"><i class="fas fa-microchip"></i></div>
-                        <div class="savings-info">
-                            <h3>vCPU Tasarrufu</h3>
-                            <div class="savings-value" id="summary-cpu-savings">0 <small>vCPU</small></div>
-                            <p>Right-Sizing & App Optimization</p>
+                <div class="opt-layout-wrapper">
+                    <!-- Sidebar Navigation -->
+                    <div class="opt-sidebar">
+                        <div class="quick-nav">
+                            <button
+                                onclick="window.scrollTo({top: 0, behavior: 'smooth'}); window.filterRightSizing('');"
+                                class="nav-pill active">
+                                <i class="fas fa-home"></i> Tümü
+                            </button>
+                            <button onclick="window.filterRightSizing('POWERED_OFF_DISK')"
+                                class="nav-pill nav-pill-warning">
+                                <i class="fas fa-power-off"></i> Kapalı VM
+                            </button>
+                            <button onclick="window.filterRightSizing('CPU_UNDERUTILIZED')" class="nav-pill">
+                                <i class="fas fa-chart-line"></i> Düşük CPU
+                            </button>
+                            <button onclick="window.filterRightSizing('EOL_OS')" class="nav-pill nav-pill-danger">
+                                <i class="fas fa-skull-crossbones"></i> EOL OS
+                            </button>
+                            <button onclick="window.filterRightSizing('OLD_HW_VERSION')"
+                                class="nav-pill nav-pill-warning">
+                                <i class="fas fa-microchip"></i> Eski HW
+                            </button>
+                            <button onclick="window.filterRightSizing('VM_TOOLS')" class="nav-pill nav-pill-danger">
+                                <i class="fas fa-tools"></i> VM Tools
+                            </button>
+                            <button onclick="window.filterRightSizing('CPU_LIMIT')" class="nav-pill nav-pill-warning">
+                                <i class="fas fa-tachometer-alt"></i> CPU Limit
+                            </button>
+                            <button onclick="window.filterRightSizing('OLD_SNAPSHOT')" class="nav-pill nav-pill-danger">
+                                <i class="fas fa-clock"></i> Eski Snapshot
+                            </button>
+                            <button onclick="window.filterRightSizing('LEGACY_NIC')" class="nav-pill">
+                                <i class="fas fa-network-wired"></i> Eski NIC
+                            </button>
+                            <button
+                                onclick="document.getElementById('opt-diskwaste').scrollIntoView({behavior: 'smooth'})"
+                                class="nav-pill">
+                                <i class="fas fa-trash-alt"></i> Disk Waste
+                            </button>
+                            <button
+                                onclick="document.getElementById('opt-zombies').scrollIntoView({behavior: 'smooth'})"
+                                class="nav-pill">
+                                <i class="fas fa-ghost"></i> Zombies
+                            </button>
                         </div>
-                    </div>
 
-                    <div class="savings-card gradient-purple">
-                        <div class="savings-icon"><i class="fas fa-memory"></i></div>
-                        <div class="savings-info">
-                            <h3>RAM Tasarrufu</h3>
-                            <div class="savings-value" id="summary-ram-savings">0 <small>GB</small></div>
-                            <p>Right-Sizing & Power Off</p>
-                        </div>
-                    </div>
-
-                    <div class="savings-card gradient-green">
-                        <div class="savings-icon"><i class="fas fa-hdd"></i></div>
-                        <div class="savings-info">
-                            <h3>Disk Tasarrufu</h3>
-                            <div class="savings-value" id="summary-disk-savings">0 <small>GB</small></div>
-                            <p>Snapshots, Waste & Zombies</p>
-                        </div>
-                    </div>
-
-                    <div class="savings-card gradient-red">
-                        <div class="savings-icon"><i class="fas fa-search-dollar"></i></div>
-                        <div class="savings-info">
-                            <h3>Optimize Edilecek VM</h3>
-                            <div class="savings-value" id="summary-total-vms">0</div>
-                            <p>Toplam Tespit</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Right-Sizing Recommendations -->
-                <div id="opt-rightsizing" class="optimization-section">
-                    <h3 class="section-title">
-                        <i class="fas fa-balance-scale"></i> Right-Sizing Recommendations
-                        <span class="badge badge-info" id="rightsizing-count">0</span>
-                    </h3>
-                    <div class="table-container">
-                        <table class="data-table" id="rightsizing-table">
-                            <thead>
-                                <tr>
-                                    <th class="sortable">VM <i class="fas fa-sort"></i></th>
-                                    <th class="sortable">Severity <i class="fas fa-sort"></i></th>
-                                    <th class="sortable">Type <i class="fas fa-sort"></i></th>
-                                    <th>Reason</th>
-                                    <th class="sortable">Current <i class="fas fa-sort"></i></th>
-                                    <th class="sortable">Recommended <i class="fas fa-sort"></i></th>
-                                    <th class="sortable">Savings <i class="fas fa-sort"></i></th>
-                                </tr>
-                            </thead>
-                            <tbody></tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- Disk Waste Analysis -->
-                <div id="opt-diskwaste" class="optimization-section">
-                    <h3 class="section-title">
-                        <i class="fas fa-trash-alt"></i> Disk Waste Analysis
-                    </h3>
-                    <div class="waste-summary">
-                        <div class="summary-card gradient-pink">
-                            <i class="fas fa-hdd"></i>
-                            <div>
-                                <h3 id="disk-waste-total">0 GB</h3>
-                                <p>Estimated Waste</p>
-                            </div>
-                        </div>
-                        <div class="summary-card gradient-orange">
-                            <i class="fas fa-list"></i>
-                            <div>
-                                <h3 id="disk-waste-count">0</h3>
-                                <p>Wasteful Disks</p>
+                        <!-- Infrastructure Filter -->
+                        <div class="opt-filter-group mt-3">
+                            <h4 class="filter-title"><i class="fas fa-filter"></i> Konum Filtresi</h4>
+                            <div id="opt-hierarchy-filter" class="hierarchy-filter-container">
+                                <div class="p-2 text-muted small">Yükleniyor...</div>
                             </div>
                         </div>
                     </div>
-                    <div class="table-container">
-                        <table class="data-table" id="disk-waste-table">
-                            <thead>
-                                <tr>
-                                    <th>VM</th>
-                                    <th>Disk</th>
-                                    <th>Waste Type</th>
-                                    <th>Capacity</th>
-                                    <th>Wasted Space</th>
-                                    <th>Provisioning</th>
-                                </tr>
-                            </thead>
-                            <tbody></tbody>
-                        </table>
-                    </div>
-                </div>
 
-                <!-- Zombie Disks Analysis -->
-                <div id="opt-zombies" class="optimization-section">
-                    <h3 class="section-title">
-                        <i class="fas fa-ghost"></i> Zombie Disks
-                    </h3>
-                    <div class="waste-summary">
-                        <div class="summary-card gradient-red">
-                            <i class="fas fa-skull-crossbones"></i>
-                            <div>
-                                <h3 id="opt-zombie-count">0</h3>
-                                <p>Zombie Diskler</p>
+                    <!-- Main Content Panel -->
+                    <div class="opt-main-panel">
+
+                        <!-- quick-nav is here -->
+
+                        <!-- Resource Savings Summary -->
+                        <div class="savings-dashboard">
+                            <div class="savings-card gradient-blue">
+                                <div class="savings-icon"><i class="fas fa-microchip"></i></div>
+                                <div class="savings-info">
+                                    <h3>vCPU Tasarrufu</h3>
+                                    <div class="savings-value" id="summary-cpu-savings">0 <small>vCPU</small></div>
+                                    <p>Right-Sizing & App Optimization</p>
+                                </div>
+                            </div>
+
+                            <div class="savings-card gradient-purple">
+                                <div class="savings-icon"><i class="fas fa-memory"></i></div>
+                                <div class="savings-info">
+                                    <h3>RAM Tasarrufu</h3>
+                                    <div class="savings-value" id="summary-ram-savings">0 <small>GB</small></div>
+                                    <p>Right-Sizing & Power Off</p>
+                                </div>
+                            </div>
+
+                            <div class="savings-card gradient-green">
+                                <div class="savings-icon"><i class="fas fa-hdd"></i></div>
+                                <div class="savings-info">
+                                    <h3>Disk Tasarrufu</h3>
+                                    <div class="savings-value" id="summary-disk-savings">0 <small>GB</small></div>
+                                    <p>Snapshots, Waste & Zombies</p>
+                                </div>
+                            </div>
+
+                            <div class="savings-card gradient-red">
+                                <div class="savings-icon"><i class="fas fa-search-dollar"></i></div>
+                                <div class="savings-info">
+                                    <h3>Optimize Edilecek VM</h3>
+                                    <div class="savings-value" id="summary-total-vms">0</div>
+                                    <p>Toplam Tespit</p>
+                                </div>
                             </div>
                         </div>
-                        <div class="summary-card gradient-purple">
-                            <i class="fas fa-server"></i>
-                            <div>
-                                <h3 id="opt-zombie-vm-count">0</h3>
-                                <p>İlişkili VM</p>
+
+                        <!-- Right-Sizing Recommendations -->
+                        <div id="opt-rightsizing" class="optimization-section">
+                            <h3 class="section-title">
+                                <i class="fas fa-balance-scale"></i> Right-Sizing Recommendations
+                                <span class="badge badge-info" id="rightsizing-count">0</span>
+                            </h3>
+                            <div class="table-container">
+                                <table class="data-table" id="rightsizing-table">
+                                    <thead>
+                                        <tr>
+                                            <th class="sortable">VM <i class="fas fa-sort"></i></th>
+                                            <th class="sortable">Host <i class="fas fa-sort"></i></th>
+                                            <th class="sortable">Severity <i class="fas fa-sort"></i></th>
+                                            <th class="sortable">Type <i class="fas fa-sort"></i></th>
+                                            <th>Reason</th>
+                                            <th class="sortable">Current <i class="fas fa-sort"></i></th>
+                                            <th class="sortable">Recommended <i class="fas fa-sort"></i></th>
+                                            <th class="sortable">Savings <i class="fas fa-sort"></i></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
                             </div>
                         </div>
-                    </div>
-                    <div class="table-container">
-                        <table class="data-table" id="opt-zombie-table">
-                            <thead>
-                                <tr>
-                                    <th>Silinen VM Klasörü</th>
-                                    <th>Cluster</th>
-                                    <th>Datastore</th>
-                                    <th>Disk Dosyası</th>
-                                    <th>Neden Zombie?</th>
-                                    <th>Kaynak</th>
-                                </tr>
-                            </thead>
-                            <tbody></tbody>
-                        </table>
-                    </div>
-                </div>
+
+                        <!-- Disk Waste Analysis -->
+                        <div id="opt-diskwaste" class="optimization-section">
+                            <h3 class="section-title">
+                                <i class="fas fa-trash-alt"></i> Disk Waste Analysis
+                            </h3>
+                            <div class="waste-summary">
+                                <div class="summary-card gradient-pink">
+                                    <i class="fas fa-hdd"></i>
+                                    <div>
+                                        <h3 id="disk-waste-total">0 GB</h3>
+                                        <p>Estimated Waste</p>
+                                    </div>
+                                </div>
+                                <div class="summary-card gradient-orange">
+                                    <i class="fas fa-list"></i>
+                                    <div>
+                                        <h3 id="disk-waste-count">0</h3>
+                                        <p>Wasteful Disks</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="table-container">
+                                <table class="data-table" id="disk-waste-table">
+                                    <thead>
+                                        <tr>
+                                            <th>VM</th>
+                                            <th>Disk</th>
+                                            <th>Waste Type</th>
+                                            <th>Capacity</th>
+                                            <th>Wasted Space</th>
+                                            <th>Provisioning</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Zombie Disks Analysis -->
+                        <div id="opt-zombies" class="optimization-section">
+                            <h3 class="section-title">
+                                <i class="fas fa-ghost"></i> Zombie Disks
+                            </h3>
+                            <div class="waste-summary">
+                                <div class="summary-card gradient-red">
+                                    <i class="fas fa-skull-crossbones"></i>
+                                    <div>
+                                        <h3 id="opt-zombie-count">0</h3>
+                                        <p>Zombie Diskler</p>
+                                    </div>
+                                </div>
+                                <div class="summary-card gradient-purple">
+                                    <i class="fas fa-server"></i>
+                                    <div>
+                                        <h3 id="opt-zombie-vm-count">0</h3>
+                                        <p>İlişkili VM</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="table-container">
+                                <table class="data-table" id="opt-zombie-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Silinen VM Klasörü</th>
+                                            <th>Cluster</th>
+                                            <th>Datastore</th>
+                                            <th>Disk Dosyası</th>
+                                            <th>Neden Zombie?</th>
+                                            <th>Kaynak</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div> <!-- opt-main-panel close -->
+                </div> <!-- opt-layout-wrapper close -->
             </section>
         </div>
     </main>
@@ -640,6 +790,19 @@
                         <tbody></tbody>
                     </table>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Risk Detail Side Panel/Modal -->
+    <div id="risk-detail-modal" class="modal">
+        <div class="modal-content risk-detail-content">
+            <div class="modal-header">
+                <h2>Risk Detayı</h2>
+                <button class="modal-close" id="risk-modal-close">&times;</button>
+            </div>
+            <div id="risk-detail-body" class="modal-body p-4">
+                <!-- Content injected via JS -->
             </div>
         </div>
     </div>

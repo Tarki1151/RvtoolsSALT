@@ -15,6 +15,7 @@ import glob
 from io import BytesIO
 
 import config as cfg
+import ai_utils as ai
 
 app = Flask(__name__, static_folder='../frontend', static_url_path='')
 CORS(app)
@@ -277,6 +278,8 @@ def api_vms():
     cluster = request.args.get('cluster', None)
     host = request.args.get('host', None)
     os_name = request.args.get('os', None)
+    pool = request.args.get('pool', None)
+    pool_path = request.args.get('pool_path', None)
     
     # Load Initial Data
     if source:
@@ -316,6 +319,12 @@ def api_vms():
         
     if os_name:
         vinfo = vinfo[vinfo['OS according to the configuration file'] == os_name]
+
+    if pool:
+        vinfo = vinfo[vinfo['Resource pool'].str.contains(pool, na=False)]
+
+    if pool_path:
+        vinfo = vinfo[vinfo['Resource pool'] == pool_path]
     
     # Calculate Summary
     total_cpu = int(vinfo['CPUs'].sum())
@@ -1242,7 +1251,19 @@ def api_rightsizing():
     
     # Also replace None with empty string for string fields
     for rec in cleaned_recommendations:
-        for key in ['vm', 'type', 'severity', 'reason', 'current_value', 'recommended_value', 'resource_type', 'source', 'cluster']:
+        vm_name = rec.get('vm')
+        # Find VM info for host/cluster
+        vm_row = vinfo[vinfo['VM'] == vm_name]
+        if not vm_row.empty:
+            vm_data = vm_row.iloc[0]
+            if not rec.get('host') or rec.get('host') == '-':
+                rec['host'] = vm_data.get('Host', '-')
+            if not rec.get('cluster') or rec.get('cluster') == '-':
+                rec['cluster'] = vm_data.get('Cluster', '-')
+            if not rec.get('datacenter') or rec.get('datacenter') == '-':
+                rec['datacenter'] = vm_data.get('Datacenter', '-')
+
+        for key in ['vm', 'type', 'severity', 'reason', 'current_value', 'recommended_value', 'resource_type', 'source', 'cluster', 'host', 'datacenter']:
             if rec.get(key) is None:
                 rec[key] = '-'
         if rec.get('potential_savings') is None:
@@ -1540,16 +1561,41 @@ def api_cost_estimation():
 
 @app.route('/api/datastores')
 def api_datastores():
-    """Get list of all datastores"""
+    """Get list of all datastores with physical storage info"""
     source = request.args.get('source', None)
+    conn = sqlite3.connect('rvtools.db')
+    conn.row_factory = sqlite3.Row
     
-    if source:
-        vdatastore = load_excel_data(f"{source}.xlsx", 'vDatastore').copy()
-        vdatastore['Source'] = source
-    else:
-        vdatastore = get_combined_data('vDatastore')
-    
-    return jsonify(vdatastore.fillna('').to_dict('records'))
+    try:
+        if source:
+            df_ds = pd.read_sql_query("SELECT * FROM vDatastore WHERE Source=?", conn, params=(source,))
+            df_mp = pd.read_sql_query("SELECT Datastore, Vendor, Model, \"Serial #\" FROM vMultiPath WHERE Source=?", conn, params=(source,))
+        else:
+            df_ds = pd.read_sql_query("SELECT * FROM vDatastore", conn)
+            df_mp = pd.read_sql_query("SELECT Datastore, Vendor, Model, \"Serial #\" FROM vMultiPath", conn)
+
+        # Merge with multipath to get Vendor/Model
+        # One datastore can have multiple paths, we just need the first unique storage info
+        df_mp_unique = df_mp.drop_duplicates(subset=['Datastore'])
+        
+        df_combined = df_ds.merge(df_mp_unique, left_on='Name', right_on='Datastore', how='left')
+        
+        # Clean numeric columns
+        cols_to_fix = ['Capacity MiB', 'Free MiB', 'Provisioned MiB', 'In Use MiB', '# VMs', '# Hosts']
+        for col in cols_to_fix:
+            if col in df_combined.columns:
+                df_combined[col] = pd.to_numeric(df_combined[col], errors='coerce').fillna(0)
+
+        return jsonify(df_combined.fillna('').to_dict('records'))
+    except Exception as e:
+        print(f"Error in api_datastores: {e}")
+        return jsonify([])
+    finally:
+        conn.close()
+
+
+
+
 
 
 @app.route('/api/hosts-clusters')
@@ -2026,6 +2072,135 @@ def api_host_hardware(host_name):
             'health': health,
             'partitions': partitions,
             'snapshots': snapshots
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/api/risks')
+def api_risks():
+    """Analyze infrastructure for various risks (OS EOL, BIOS Age, HW Versions, etc.)"""
+    conn = sqlite3.connect('rvtools.db')
+    conn.row_factory = sqlite3.Row
+    
+    try:
+        # 1. Fetch Data
+        vinfo = pd.read_sql_query("SELECT VM, Powerstate, \"OS according to the configuration file\" as OS, \"HW version\", Host, Source FROM vInfo", conn)
+        vhost = pd.read_sql_query("SELECT Host, Vendor, Model, \"BIOS Version\", \"BIOS Date\", \"ESX Version\", Source FROM vHost", conn)
+        vhealth = pd.read_sql_query("SELECT * FROM vHealth", conn)
+        
+        risks = []
+        
+        # --- OS Risks ---
+        eol_os_patterns = [
+            r'Windows Server 2003', r'Windows Server 2008', r'Windows Server 2012',
+            r'CentOS 7', r'CentOS 6', r'CentOS 5',
+            r'Red Hat Enterprise Linux [456]',
+            r'Ubuntu 1[0246]\.', r'Debian [6789]'
+        ]
+        
+        unique_os = vinfo['OS'].dropna().unique()
+        os_risk_map = {}
+        for os_name in unique_os:
+            is_eol = False
+            for pattern in eol_os_patterns:
+                if re.search(pattern, str(os_name), re.I):
+                    is_eol = True
+                    break
+            if is_eol:
+                os_risk_map[os_name] = "End of Life (EOL) İşletim Sistemi. Güvenlik ve destek riskleri mevcut."
+
+        for _, vm in vinfo.iterrows():
+            if vm['OS'] in os_risk_map:
+                risks.append({
+                    'target': vm['VM'],
+                    'type': 'OS_EOL',
+                    'severity': 'Critical',
+                    'category': 'Software',
+                    'description': f"VM '{vm['VM']}' üzerinde eski bir OS ({vm['OS']}) çalışıyor.",
+                    'recommendation': "İşletim sistemini desteklenen bir sürüme yükseltin.",
+                    'source': vm['Source']
+                })
+
+        # --- Hardware / ESXi Risks ---
+        for _, host in vhost.iterrows():
+            # ESXi Version Check
+            esx_ver = str(host['ESX Version'])
+            if '6.' in esx_ver or '5.' in esx_ver:
+                risks.append({
+                    'target': host['Host'],
+                    'type': 'ESXI_OUTDATED',
+                    'severity': 'High',
+                    'category': 'Hypervisor',
+                    'description': f"Host '{host['Host']}' üzerinde eski ESXi sürümü ({esx_ver}) yüklü.",
+                    'recommendation': "ESXi 7.0 veya 8.0 sürümüne yükseltme planlayın.",
+                    'source': host['Source']
+                })
+            
+            # BIOS Age Check
+            try:
+                bios_date_str = str(host['BIOS Date'])
+                # RVTools usually formats it like '2020-05-12' or '05/12/2020'
+                # Simplistic check: find the year
+                year_match = re.search(r'(19|20)\d{2}', bios_date_str)
+                if year_match:
+                    year = int(year_match.group(0))
+                    if year < 2021:
+                        risks.append({
+                            'target': host['Host'],
+                            'type': 'BIOS_OUTDATED',
+                            'severity': 'Medium',
+                            'category': 'Hardware',
+                            'description': f"BIOS tarihi ({bios_date_str}) 3 yıldan eski. Güvenlik açıkları (Spectre/Meltdown vb.) ve stabilite riskleri olabilir.",
+                            'recommendation': "En güncel BIOS/Firmware sürümünü vendor sitesinden kontrol edip uygulayın.",
+                            'source': host['Source']
+                        })
+            except:
+                pass
+
+        # --- vHealth Integration ---
+        for _, h in vhealth.iterrows():
+            severity = 'High' if str(h.get('Message type', '')).lower() == 'critical' else 'Medium'
+            risks.append({
+                'target': h.get('Name', 'Global'),
+                'type': 'RV_HEALTH',
+                'severity': severity,
+                'category': 'Operation',
+                'description': h.get('Message', ''),
+                'recommendation': "RVTools Health tablosundaki detayları inceleyin.",
+                'source': h.get('Source', '')
+            })
+
+        # --- AI Powered Insights (Experimental) ---
+        # Generate a prompt for Grok if there are significant findings
+        if len(risks) > 0:
+            os_list = ", ".join(list(os_risk_map.keys())[:10])
+            host_models = ", ".join(vhost['Model'].unique().tolist()[:5])
+            
+            ai_prompt = f"""
+            Aşağıdaki sanallaştırma altyapısı verilerine dayanarak en kritik 3 riski ve çözüm önerisini Türkçe olarak kısa maddeler halinde belirt:
+            - Eski OS'lar: {os_list}
+            - Sunucu Modelleri: {host_models}
+            - ESXi Sürümleri: {vhost['ESX Version'].unique().tolist()}
+            """
+            
+            ai_insight = ai.call_grok(ai_prompt, system_prompt="Sen bir sanallaştırma ve siber güvenlik uzmanısın. Riskleri teknik ama yönetici özeti şeklinde sun.")
+        else:
+            ai_insight = "Şu an için altyapıda kritik bir konfigürasyonel risk tespit edilmedi."
+
+        return jsonify({
+            'risks': risks,
+            'ai_insight': ai_insight,
+            'stats': {
+                'critical_count': len([r for r in risks if r['severity'] == 'Critical']),
+                'high_count': len([r for r in risks if r['severity'] == 'High']),
+                'medium_count': len([r for r in risks if r['severity'] == 'Medium']),
+            }
         })
         
     except Exception as e:

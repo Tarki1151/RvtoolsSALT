@@ -1,76 +1,5 @@
 // UI Management Layer
-import { currentSource, setCurrentSource } from './config.js';
-import { loadDashboard } from './dashboard.js';
-import { loadVMs } from './vms.js';
-import { loadReports } from './reports.js';
-import { loadInventory } from './inventory.js';
-import { loadHosts, loadDatastores } from './hosts.js';
-import { loadOptimization } from './optimization.js';
-
-export function initNavigation() {
-    document.querySelectorAll('.nav-item').forEach(item => {
-        item.addEventListener('click', (e) => {
-            e.preventDefault();
-            const page = item.dataset.page;
-            navigateTo(page);
-        });
-    });
-}
-
-export function navigateTo(page) {
-    // Hide all pages
-    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-
-    // Remove active from nav
-    document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
-
-    // Show selected page
-    document.getElementById(`page-${page}`).classList.add('active');
-    document.querySelector(`[data-page="${page}"]`).classList.add('active');
-
-    // Update page title
-    const titles = {
-        dashboard: 'Dashboard',
-        vms: 'Virtual Machines',
-        reports: 'Reports',
-        inventory: 'Inventory',
-        hosts: 'Hosts',
-        datastores: 'Datastores',
-        optimization: 'Optimization'
-    };
-    document.getElementById('page-title').textContent = titles[page] || page;
-
-    // Show/hide PDF button (only on optimization page)
-    const pdfDropdown = document.getElementById('header-pdf-dropdown');
-    if (pdfDropdown) {
-        pdfDropdown.style.display = page === 'optimization' ? 'block' : 'none';
-    }
-
-    // Load page data
-    switch (page) {
-        case 'dashboard':
-            loadDashboard();
-            break;
-        case 'vms':
-            loadVMs();
-            break;
-        case 'reports':
-            loadReports();
-            break;
-        case 'inventory':
-            loadInventory();
-            break;
-        case 'hosts':
-            loadHosts();
-            break;
-        case 'datastores':
-            loadDatastores();
-            break;
-        case 'optimization':
-            loadOptimization();
-            break;
-    }
-}
+import { loadOldSnapshots, loadZombieDisks, loadResourceUsage } from './reports.js';
 
 export function initTabs() {
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -93,8 +22,6 @@ export function initTabs() {
 }
 
 function loadTabData(tabId) {
-    const { loadOldSnapshots, loadZombieDisks, loadResourceUsage } = require('./reports.js');
-
     switch (tabId) {
         case 'tab-old-snapshots':
             loadOldSnapshots();
@@ -118,6 +45,12 @@ export function initModal() {
 
     window.addEventListener('click', (e) => {
         if (e.target === modal) {
+            modal.style.display = 'none';
+        }
+    });
+
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modal.style.display === 'block') {
             modal.style.display = 'none';
         }
     });
@@ -189,5 +122,76 @@ export function initSorting() {
         });
 
         rows.forEach(row => tbody.appendChild(row));
+    });
+}
+
+export function initResizing() {
+    // Add resizer elements to all th in .data-table
+    document.querySelectorAll('.data-table thead th').forEach(th => {
+        if (!th.querySelector('.resizer')) {
+            const resizer = document.createElement('div');
+            resizer.className = 'resizer';
+            th.appendChild(resizer);
+            setupResizer(th, resizer);
+        }
+    });
+
+    // Apply saved widths
+    applySavedColumnWidths();
+}
+
+function setupResizer(th, resizer) {
+    let x = 0;
+    let w = 0;
+
+    const mouseDownHandler = function (e) {
+        x = e.clientX;
+        const styles = window.getComputedStyle(th);
+        w = parseInt(styles.width, 10);
+
+        document.addEventListener('mousemove', mouseMoveHandler);
+        document.addEventListener('mouseup', mouseUpHandler);
+        resizer.classList.add('resizing');
+    };
+
+    const mouseMoveHandler = function (e) {
+        const dx = e.clientX - x;
+        th.style.width = `${w + dx}px`;
+    };
+
+    const mouseUpHandler = function () {
+        document.removeEventListener('mousemove', mouseMoveHandler);
+        document.removeEventListener('mouseup', mouseUpHandler);
+        resizer.classList.remove('resizing');
+        saveColumnWidths(th.closest('table'));
+    };
+
+    resizer.addEventListener('mousedown', mouseDownHandler);
+}
+
+function saveColumnWidths(table) {
+    if (!table || !table.id) return;
+    const headers = table.querySelectorAll('thead th');
+    const widths = Array.from(headers).map(th => {
+        // Use getBoundingClientRect for precise fractional width if available, or offsetWidth
+        return window.getComputedStyle(th).width;
+    });
+    localStorage.setItem(`table-widths-${table.id}`, JSON.stringify(widths));
+}
+
+export function applySavedColumnWidths() {
+    document.querySelectorAll('.data-table').forEach(table => {
+        if (!table.id) return;
+        const saved = localStorage.getItem(`table-widths-${table.id}`);
+        if (saved) {
+            const widths = JSON.parse(saved);
+            const headers = table.querySelectorAll('thead th');
+            table.style.tableLayout = 'fixed'; // Ensure fixed layout when applying saved widths
+            widths.forEach((width, i) => {
+                if (headers[i] && width) {
+                    headers[i].style.width = width;
+                }
+            });
+        }
     });
 }

@@ -2871,3 +2871,496 @@ th.sortable.desc i {
 .hc-section h3 i {
     color: var(--accent-blue);
 }
+
+/* AI Insight Panel */
+.ai-insight-panel {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.1));
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    border-radius: 16px;
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 24px;
+}
+
+.ai-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    font-weight: 600;
+    color: var(--accent-blue-light);
+    font-size: 1.1rem;
+}
+
+.ai-header i {
+    font-size: 1.4rem;
+    animation: pulse 2s infinite;
+}
+
+.ai-content {
+    line-height: 1.6;
+    color: var(--text-secondary);
+}
+
+.ai-content h1,
+.ai-content h2,
+.ai-content h3 {
+    color: var(--text-primary);
+    margin-top: 16px;
+    margin-bottom: 8px;
+    font-size: 1.1rem;
+}
+
+.ai-content ul,
+.ai-content ol {
+    margin-bottom: 16px;
+    padding-left: 20px;
+}
+
+.ai-content li {
+    margin-bottom: 6px;
+}
+
+/* Risk Table Styles */
+.risk-row-critical {
+    background: rgba(239, 68, 68, 0.05) !important;
+}
+
+.risk-row-high {
+    background: rgba(245, 158, 11, 0.03) !important;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    50% {
+        transform: scale(1.1);
+        opacity: 0.8;
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* Risk Tabs */
+.risk-tabs {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 6px;
+    border-radius: 12px;
+}
+
+.risk-tab-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 10px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+}
+
+.risk-tab-btn i {
+    font-size: 0.85rem;
+    opacity: 0.7;
+}
+
+.risk-tab-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+}
+
+.risk-tab-btn.active {
+    background: var(--accent-blue);
+    color: white;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.risk-tab-btn .badge {
+    background: rgba(255, 255, 255, 0.2);
+    font-size: 0.75rem;
+    padding: 2px 6px;
+}
+
+/* Risk Table Column Widths & Row Clicks */
+.risks-data-table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.risks-data-table td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.risks-data-table tr:hover {
+    background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.text-truncate-2 {
+    white-space: normal !important;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Risk Detail Modal */
+.risk-detail-content {
+    max-width: 600px;
+    border-left: 4px solid var(--accent-blue);
+}
+
+.bg-dark-soft {
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.bg-teal-soft {
+    background: rgba(20, 184, 166, 0.1);
+    border: 1px solid rgba(20, 184, 166, 0.2);
+}
+
+.risk-detail-box {
+    font-size: 0.95rem;
+    line-height: 1.6;
+}
+
+.d-flex.justify-content-between.align-items-center {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* Datastore Page Specifics */
+.ds-name-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.text-teal {
+    color: var(--accent-teal);
+}
+
+.progress-bar-container {
+    width: 100%;
+    height: 18px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 9px;
+    position: relative;
+    overflow: hidden;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    transition: width 0.3s ease;
+}
+
+.progress-label {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: white;
+    text-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
+}
+
+.bg-success {
+    background-color: var(--accent-green) !important;
+}
+
+.bg-warning {
+    background-color: var(--accent-orange) !important;
+}
+
+.bg-danger {
+    background-color: var(--accent-red) !important;
+}
+
+.storage-info strong {
+    font-size: 0.85rem;
+}
+
+.hc-node-source.active {
+    background: rgba(59, 130, 246, 0.15);
+    border-left: 3px solid var(--accent-blue);
+}
+
+/* Global Table Selection & Hover Enhancements */
+.data-table tbody tr {
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.data-table tbody tr:hover {
+    background: rgba(59, 130, 246, 0.12) !important;
+    transform: translateX(4px);
+    box-shadow: inset 4px 0 0 var(--accent-blue);
+}
+
+.data-table tbody tr.active-row {
+    background: rgba(59, 130, 246, 0.2) !important;
+    box-shadow: inset 4px 0 0 var(--accent-blue);
+}
+
+/* Specific highlight for Risk and Datastore tables */
+.risks-data-table tbody tr:active,
+#datastores-table tbody tr:active {
+    background: rgba(59, 130, 246, 0.3) !important;
+}
+
+/* Ensure indicators are visible on dark background */
+.data-table tbody tr:hover td {
+    color: var(--text-primary) !important;
+}
+
+
+/* Datastore Table Sorting */
+th.sortable {
+    position: relative;
+    user-select: none;
+    transition: background-color 0.2s;
+}
+
+th.sortable:hover {
+    background-color: rgba(59, 130, 246, 0.1) !important;
+}
+
+th.sortable i {
+    margin-left: 8px;
+    font-size: 0.8rem;
+    transition: color 0.2s;
+}
+
+th.sortable.sorted {
+    color: var(--accent-blue-light) !important;
+}
+
+th.sortable.sorted i {
+    color: var(--accent-blue) !important;
+}
+
+/* Optimization Page Sidebar Layout */
+.opt-layout-wrapper {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    padding: 10px 0;
+}
+
+.opt-sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 80px;
+}
+
+.opt-main-panel {
+    flex-grow: 1;
+    min-width: 0;
+    /* Prevents overflow */
+}
+
+/* Vertical Quick Nav */
+.opt-sidebar .quick-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    padding: 15px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.opt-sidebar .nav-pill {
+    width: 100%;
+    justify-content: flex-start;
+    padding: 10px 15px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.opt-sidebar .nav-pill i {
+    width: 18px;
+    margin-right: 10px;
+    text-align: center;
+}
+
+/* Tooltip Enhancement Styles */
+.tooltip-vm-context {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 6px 10px;
+    border-radius: 6px;
+    margin: 8px 0;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    border-left: 3px solid var(--accent-blue);
+}
+
+.tooltip-vm-context strong {
+    color: var(--text-primary);
+}
+
+/* Responsive adjust for mobile */
+@media (max-width: 1200px) {
+    .opt-layout-wrapper {
+        flex-direction: column;
+    }
+
+    .opt-sidebar {
+        width: 100%;
+        position: static;
+    }
+
+    .opt-sidebar .quick-nav {
+        flex-direction: row;
+        overflow-x: auto;
+        padding-bottom: 20px;
+    }
+}
+
+/* Narrow Sidebar Adjustments */
+.opt-sidebar {
+    width: 140px;
+    /* narrowed but widened by 25% */
+}
+
+.opt-sidebar .nav-pill span {
+    font-size: 0.75rem;
+}
+
+.opt-sidebar .quick-nav {
+    padding: 10px;
+}
+
+/* Hierarchy Filter Styles */
+.opt-filter-group {
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 10px;
+}
+
+.filter-title {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+    padding-left: 5px;
+    letter-spacing: 0.5px;
+}
+
+.hierarchy-filter-container {
+    max-height: 400px;
+    overflow-y: auto;
+    font-size: 0.8rem;
+}
+
+.hierarchy-item {
+    margin-bottom: 4px;
+}
+
+.dc-item {
+    font-weight: 600;
+    color: var(--accent-blue-light);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px;
+    border-radius: 4px;
+}
+
+.cluster-item {
+    margin-left: 18px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 4px;
+    color: var(--text-secondary);
+}
+
+.hierarchy-item input[type="checkbox"] {
+    cursor: pointer;
+    width: 14px;
+    height: 14px;
+}
+
+.hierarchy-item label {
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    user-select: none;
+}
+
+.opt-sidebar .nav-pill {
+    padding: 10px;
+    font-size: 0.8rem;
+}
+
+.opt-sidebar .filter-title {
+    font-size: 0.7rem;
+    padding-left: 0;
+}
+
+.dc-item label,
+.cluster-item label {
+    font-size: 0.8rem;
+    max-width: 100px;
+}
+
+.hierarchy-filter-container::-webkit-scrollbar {
+    width: 4px;
+}
+
+.hierarchy-filter-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+}
+/* Table Resizing Styles */
+.data-table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.data-table th {
+    position: relative;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.resizer {
+    position: absolute;
+    right: 0;
+    top: 0;
+    height: 100%;
+    width: 5px;
+    background: rgba(255, 255, 255, 0.05);
+    cursor: col-resize;
+    z-index: 10;
+}
+
+.resizer:hover, .resizer.resizing {
+    background: var(--accent-blue);
+    width: 2px;
+}

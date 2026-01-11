@@ -1,6 +1,6 @@
 // Main Application Orchestrator
 import { elements, setCurrentSource } from './config.js';
-import { initTabs, initModal, initVMTabs, initSorting } from './ui.js';
+import { initTabs, initModal, initVMTabs, initSorting, initResizing } from './ui.js';
 import { loadDashboard } from './dashboard.js';
 import { loadVMs } from './vms.js';
 import { loadReports, loadOldSnapshots, loadZombieDisks, loadResourceUsage } from './reports.js';
@@ -25,6 +25,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initVMTabs();
     initSorting();
     initFilters();
+    initResizing();
 
     // Load initial data
     await loadInitialData();
@@ -52,6 +53,7 @@ function initNavigation() {
                 vms: 'Virtual Machines',
                 reports: 'Reports',
                 'hosts-clusters': 'Hosts & Clusters',
+                risks: 'Altyapı Risk Analizi',
                 datastores: 'Datastores',
                 optimization: 'Optimization'
             };
@@ -78,15 +80,20 @@ function initNavigation() {
                     const { loadHostsClusters } = await import('./hostsClusters.js');
                     loadHostsClusters();
                     break;
+                case 'risks':
+                    const { loadRisks } = await import('./risks.js');
+                    loadRisks();
+                    break;
                 case 'datastores':
                     const { loadDatastores } = await import('./datastores.js');
                     loadDatastores();
                     break;
                 case 'optimization':
                     const { loadOptimization } = await import('./optimization.js');
-                    loadOptimization();
+                    await loadOptimization();
                     break;
             }
+            initResizing();
         });
     });
 }
