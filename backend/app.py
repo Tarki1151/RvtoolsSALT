@@ -1610,6 +1610,319 @@ def api_inventory_detail():
         print(f"Error in inventory detail: {e}")
         return jsonify({'error': str(e), 'vms': []})
 
+@app.route('/api/hosts-clusters')
+def api_hosts_clusters():
+    """Get hierarchical datacenter/cluster/host structure with metrics (vCenter-style)"""
+    try:
+        vinfo = get_combined_data('vInfo').copy()
+        vhost = get_combined_data('vHost').copy()
+        
+        # Clean numeric columns for vInfo
+        vinfo['CPUs'] = pd.to_numeric(vinfo['CPUs'], errors='coerce').fillna(0)
+        vinfo['Memory'] = pd.to_numeric(vinfo['Memory'], errors='coerce').fillna(0)
+        vinfo['Total disk capacity MiB'] = pd.to_numeric(vinfo['Total disk capacity MiB'], errors='coerce').fillna(0)
+        
+        # Clean numeric columns for vHost - including REAL usage metrics
+        vhost['# CPU'] = pd.to_numeric(vhost['# CPU'], errors='coerce').fillna(0)
+        vhost['Cores per CPU'] = pd.to_numeric(vhost['Cores per CPU'], errors='coerce').fillna(0)
+        vhost['# Cores'] = pd.to_numeric(vhost['# Cores'], errors='coerce').fillna(0)
+        vhost['# Memory'] = pd.to_numeric(vhost['# Memory'], errors='coerce').fillna(0)
+        vhost['CPU usage %'] = pd.to_numeric(vhost['CPU usage %'], errors='coerce').fillna(0)
+        vhost['Memory usage %'] = pd.to_numeric(vhost['Memory usage %'], errors='coerce').fillna(0)
+        vhost['# vCPUs'] = pd.to_numeric(vhost['# vCPUs'], errors='coerce').fillna(0)
+        vhost['vRAM'] = pd.to_numeric(vhost['vRAM'], errors='coerce').fillna(0)
+        
+        # Build hierarchical structure
+        hierarchy = {}
+        
+        # Process hosts first for physical metrics (from vHost)
+        host_metrics = {}
+        for _, host in vhost.iterrows():
+            host_name = host.get('Host', 'Unknown')
+            physical_cores = int(host['# Cores']) if host['# Cores'] > 0 else int(host['# CPU'] * host['Cores per CPU'])
+            physical_ram_gb = round(host['# Memory'] / 1024, 2)
+            
+            # vCPU:pCore ratio
+            vcpu_pcore_ratio = round(host['# vCPUs'] / physical_cores, 2) if physical_cores > 0 else 0
+            
+            # vRAM:pRAM ratio
+            vram_gb = round(host['vRAM'] / 1024, 2)
+            vram_pram_ratio = round(vram_gb / physical_ram_gb, 2) if physical_ram_gb > 0 else 0
+            
+            # Handle NaN values for string fields
+            dc_name = host.get('Datacenter', '')
+            cl_name = host.get('Cluster', '')
+            cpu_model = host.get('CPU Model', '')
+            esxi_ver = host.get('ESX Version', '')
+            src_name = host.get('Source', '')
+            
+            if pd.isna(dc_name): dc_name = ''
+            if pd.isna(cl_name): cl_name = ''
+            if pd.isna(cpu_model): cpu_model = ''
+            if pd.isna(esxi_ver): esxi_ver = ''
+            if pd.isna(src_name): src_name = ''
+            
+            host_metrics[host_name] = {
+                'physical_cores': physical_cores,
+                'physical_ram_gb': physical_ram_gb,
+                'cpu_sockets': int(host['# CPU']),
+                'cores_per_socket': int(host['Cores per CPU']),
+                'cpu_model': cpu_model,
+                'esxi_version': esxi_ver,
+                'datacenter': dc_name,
+                'cluster': cl_name,
+                'source': src_name,
+                # REAL usage from vHost (ESXi reported)
+                'cpu_usage_pct': round(host['CPU usage %'], 1),
+                'ram_usage_pct': round(host['Memory usage %'], 1),
+                # Overcommit ratios
+                'vcpu_count': int(host['# vCPUs']),
+                'vram_gb': vram_gb,
+                'vcpu_pcore_ratio': vcpu_pcore_ratio,
+                'vram_pram_ratio': vram_pram_ratio
+            }
+        
+        # First, build hierarchy from vHost (ensures all hosts are included even without VMs)
+        for _, host in vhost.iterrows():
+            host_name = host.get('Host', 'Unknown')
+            source = host.get('Source', 'Unknown')
+            datacenter = host.get('Datacenter', 'Unknown Datacenter')
+            cluster = host.get('Cluster', '')
+            
+            # Skip if cluster is NaN
+            if pd.isna(cluster) or cluster == '' or cluster == 'nan':
+                cluster = 'Standalone Hosts'
+            
+            # Initialize hierarchy
+            if source not in hierarchy:
+                hierarchy[source] = {'datacenters': {}}
+            
+            if datacenter not in hierarchy[source]['datacenters']:
+                hierarchy[source]['datacenters'][datacenter] = {
+                    'clusters': {},
+                    'total_vms': 0,
+                    'powered_on': 0,
+                    'total_vcpu': 0,
+                    'total_ram_gb': 0
+                }
+            
+            dc = hierarchy[source]['datacenters'][datacenter]
+            
+            if cluster not in dc['clusters']:
+                dc['clusters'][cluster] = {
+                    'hosts': {},
+                    'total_vms': 0,
+                    'powered_on': 0,
+                    'total_vcpu': 0,
+                    'total_ram_gb': 0,
+                    'total_physical_cores': 0,
+                    'total_physical_ram_gb': 0,
+                    'avg_cpu_usage_pct': 0,
+                    'avg_ram_usage_pct': 0
+                }
+            
+            cl = dc['clusters'][cluster]
+            
+            if host_name not in cl['hosts']:
+                hm = host_metrics.get(host_name, {
+                    'physical_cores': 0,
+                    'physical_ram_gb': 0,
+                    'cpu_sockets': 0,
+                    'cores_per_socket': 0,
+                    'cpu_model': '',
+                    'esxi_version': '',
+                    'source': source,
+                    'cpu_usage_pct': 0,
+                    'ram_usage_pct': 0,
+                    'vcpu_count': 0,
+                    'vram_gb': 0,
+                    'vcpu_pcore_ratio': 0,
+                    'vram_pram_ratio': 0
+                })
+                cl['hosts'][host_name] = {
+                    'vms': [],
+                    'total_vms': 0,
+                    'powered_on': 0,
+                    'total_vcpu': 0,
+                    'total_ram_gb': 0,
+                    **hm
+                }
+                cl['total_physical_cores'] += hm['physical_cores']
+                cl['total_physical_ram_gb'] += hm['physical_ram_gb']
+        
+        # Now process VMs to add them to existing hosts
+        for _, row in vinfo.iterrows():
+            source = row.get('Source', 'Unknown')
+            datacenter = row.get('Datacenter', 'Unknown Datacenter')
+            cluster = row.get('Cluster', 'Unknown Cluster')
+            host = row.get('Host', 'Unknown Host')
+            vm_name = row.get('VM', '')
+            powerstate = row.get('Powerstate', 'poweredOff')
+            
+            # Skip if cluster is NaN
+            if pd.isna(cluster) or cluster == 'nan':
+                cluster = 'Standalone Hosts'
+            
+            # Initialize hierarchy if needed (for VMs on hosts not in vHost)
+            if source not in hierarchy:
+                hierarchy[source] = {'datacenters': {}}
+            
+            if datacenter not in hierarchy[source]['datacenters']:
+                hierarchy[source]['datacenters'][datacenter] = {
+                    'clusters': {},
+                    'total_vms': 0,
+                    'powered_on': 0,
+                    'total_vcpu': 0,
+                    'total_ram_gb': 0
+                }
+            
+            dc = hierarchy[source]['datacenters'][datacenter]
+            
+            if cluster not in dc['clusters']:
+                dc['clusters'][cluster] = {
+                    'hosts': {},
+                    'total_vms': 0,
+                    'powered_on': 0,
+                    'total_vcpu': 0,
+                    'total_ram_gb': 0,
+                    'total_physical_cores': 0,
+                    'total_physical_ram_gb': 0,
+                    # Aggregated real usage
+                    'avg_cpu_usage_pct': 0,
+                    'avg_ram_usage_pct': 0
+                }
+            
+            cl = dc['clusters'][cluster]
+            
+            if host not in cl['hosts']:
+                hm = host_metrics.get(host, {
+                    'physical_cores': 0,
+                    'physical_ram_gb': 0,
+                    'cpu_sockets': 0,
+                    'cores_per_socket': 0,
+                    'cpu_model': '',
+                    'esxi_version': '',
+                    'source': source,
+                    'cpu_usage_pct': 0,
+                    'ram_usage_pct': 0,
+                    'vcpu_count': 0,
+                    'vram_gb': 0,
+                    'vcpu_pcore_ratio': 0,
+                    'vram_pram_ratio': 0
+                })
+                cl['hosts'][host] = {
+                    'vms': [],
+                    'total_vms': 0,
+                    'powered_on': 0,
+                    'total_vcpu': 0,
+                    'total_ram_gb': 0,
+                    **hm
+                }
+                cl['total_physical_cores'] += hm['physical_cores']
+                cl['total_physical_ram_gb'] += hm['physical_ram_gb']
+            
+            h = cl['hosts'][host]
+            
+            # Add VM
+            vm_data = {
+                'name': vm_name,
+                'powerstate': powerstate,
+                'vcpu': int(row['CPUs']),
+                'ram_gb': round(row['Memory'] / 1024, 2),
+                'disk_gb': round(row['Total disk capacity MiB'] / 1024, 2),
+                'os': row.get('OS according to the configuration file', '')
+            }
+            h['vms'].append(vm_data)
+            
+            # Update host VM metrics
+            h['total_vms'] += 1
+            h['total_vcpu'] += int(row['CPUs'])
+            h['total_ram_gb'] += round(row['Memory'] / 1024, 2)
+            if powerstate == 'poweredOn':
+                h['powered_on'] += 1
+            
+            # Update cluster metrics
+            cl['total_vms'] += 1
+            cl['total_vcpu'] += int(row['CPUs'])
+            cl['total_ram_gb'] += round(row['Memory'] / 1024, 2)
+            if powerstate == 'poweredOn':
+                cl['powered_on'] += 1
+            
+            # Update datacenter metrics
+            dc['total_vms'] += 1
+            dc['total_vcpu'] += int(row['CPUs'])
+            dc['total_ram_gb'] += round(row['Memory'] / 1024, 2)
+            if powerstate == 'poweredOn':
+                dc['powered_on'] += 1
+        
+        # Calculate aggregated metrics for clusters and datacenters
+        for source_name, source_data in hierarchy.items():
+            for dc_name, dc_data in source_data['datacenters'].items():
+                dc_data['total_physical_cores'] = 0
+                dc_data['total_physical_ram_gb'] = 0
+                dc_data['avg_cpu_usage_pct'] = 0
+                dc_data['avg_ram_usage_pct'] = 0
+                dc_cpu_sum = 0
+                dc_ram_sum = 0
+                dc_host_count = 0
+                
+                for cl_name, cl_data in dc_data['clusters'].items():
+                    host_count = len(cl_data['hosts'])
+                    cl_data['host_count'] = host_count
+                    
+                    if host_count > 0:
+                        # Calculate cluster averages from real host data
+                        cpu_usage_sum = 0
+                        ram_usage_sum = 0
+                        total_vcpu_from_hosts = 0
+                        total_vram_from_hosts = 0
+                        
+                        for host_name, host_data in cl_data['hosts'].items():
+                            cpu_usage_sum += host_data.get('cpu_usage_pct', 0)
+                            ram_usage_sum += host_data.get('ram_usage_pct', 0)
+                            total_vcpu_from_hosts += host_data.get('vcpu_count', 0)
+                            total_vram_from_hosts += host_data.get('vram_gb', 0)
+                        
+                        cl_data['avg_cpu_usage_pct'] = round(cpu_usage_sum / host_count, 1)
+                        cl_data['avg_ram_usage_pct'] = round(ram_usage_sum / host_count, 1)
+                        
+                        # vCPU:pCore ratio for cluster
+                        if cl_data['total_physical_cores'] > 0:
+                            cl_data['vcpu_pcore_ratio'] = round(total_vcpu_from_hosts / cl_data['total_physical_cores'], 2)
+                        else:
+                            cl_data['vcpu_pcore_ratio'] = 0
+                        
+                        # vRAM:pRAM ratio for cluster
+                        if cl_data['total_physical_ram_gb'] > 0:
+                            cl_data['vram_pram_ratio'] = round(total_vram_from_hosts / cl_data['total_physical_ram_gb'], 2)
+                        else:
+                            cl_data['vram_pram_ratio'] = 0
+                        
+                        # Sum for datacenter averages
+                        dc_cpu_sum += cpu_usage_sum
+                        dc_ram_sum += ram_usage_sum
+                        dc_host_count += host_count
+                    
+                    # Aggregate to datacenter
+                    dc_data['total_physical_cores'] += cl_data['total_physical_cores']
+                    dc_data['total_physical_ram_gb'] += cl_data['total_physical_ram_gb']
+                
+                dc_data['cluster_count'] = len(dc_data['clusters'])
+                dc_data['host_count'] = dc_host_count
+                
+                # Datacenter average usage
+                if dc_host_count > 0:
+                    dc_data['avg_cpu_usage_pct'] = round(dc_cpu_sum / dc_host_count, 1)
+                    dc_data['avg_ram_usage_pct'] = round(dc_ram_sum / dc_host_count, 1)
+        
+        return jsonify(hierarchy)
+        
+    except Exception as e:
+        print(f"Error in hosts-clusters: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/inventory')
 def api_inventory():
     """Get inventory tree structure"""

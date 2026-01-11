@@ -40,6 +40,10 @@
                 <i class="fas fa-sitemap"></i>
                 <span>Inventory</span>
             </a>
+            <a href="#" class="nav-item" data-page="hosts-clusters">
+                <i class="fas fa-cubes"></i>
+                <span>Hosts & Clusters</span>
+            </a>
             <a href="#" class="nav-item" data-page="hosts">
                 <i class="fas fa-hdd"></i>
                 <span>Hosts</span>
@@ -345,6 +349,29 @@
                             <div class="empty-state">
                                 <i class="fas fa-mouse-pointer"></i>
                                 <p>Detayları görmek için soldan bir öğe seçin</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Hosts & Clusters Page (vCenter Style) -->
+            <section id="page-hosts-clusters" class="page">
+                <div class="hc-container">
+                    <div class="hc-sidebar">
+                        <div class="hc-search">
+                            <i class="fas fa-search"></i>
+                            <input type="text" id="hc-search-input" placeholder="Ara...">
+                        </div>
+                        <div id="hc-tree" class="hc-tree">
+                            <!-- Tree populated via JS -->
+                        </div>
+                    </div>
+                    <div class="hc-content">
+                        <div id="hc-detail-view">
+                            <div class="empty-state">
+                                <i class="fas fa-cubes"></i>
+                                <p>Hosts & Clusters verisi yükleniyor...</p>
                             </div>
                         </div>
                     </div>

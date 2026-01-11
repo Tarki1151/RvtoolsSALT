@@ -56,6 +56,7 @@ function initNavigation() {
                 vms: 'Virtual Machines',
                 reports: 'Reports',
                 inventory: 'Inventory',
+                'hosts-clusters': 'Hosts & Clusters',
                 hosts: 'Hosts',
                 datastores: 'Datastores',
                 optimization: 'Optimization'
@@ -82,6 +83,10 @@ function initNavigation() {
                 case 'inventory':
                     const { loadInventory } = await import('./inventory.js');
                     loadInventory();
+                    break;
+                case 'hosts-clusters':
+                    const { loadHostsClusters } = await import('./hostsClusters.js');
+                    loadHostsClusters();
                     break;
                 case 'hosts':
                     const { loadHosts } = await import('./hosts.js');
