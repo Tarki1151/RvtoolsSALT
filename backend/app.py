@@ -2082,6 +2082,21 @@ def api_host_hardware(host_name):
         conn.close()
 
 
+@app.route('/api/ai/remediation')
+def api_remediation():
+    message = request.args.get('message')
+    if not message:
+        return jsonify({'error': 'Message required'}), 400
+    
+    from ai_utils import get_remediation_advice
+    advice = get_remediation_advice(message)
+    
+    return jsonify({
+        'message': message,
+        'remediation': advice
+    })
+
+
 @app.route('/api/risks')
 def api_risks():
     """Analyze infrastructure for various risks (OS EOL, BIOS Age, HW Versions, etc.)"""

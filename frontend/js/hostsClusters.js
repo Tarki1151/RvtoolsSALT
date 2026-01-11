@@ -976,12 +976,21 @@ function renderBasicHostDetail(hostData, hostName, clusterName, sourceName) {
 }
 
 function renderHealthTab(health, partitions, snapshots) {
-    let healthRows = health.length ? health.map(h => `
+    let healthRows = health.length ? health.map((h, idx) => `
         <div class="hc-alert-item ${h['Message type'] === 'Critical' ? 'critical' : 'warning'}">
             <div class="hc-alert-icon"><i class="fas ${h['Message type'] === 'Critical' ? 'fa-times-circle' : 'fa-exclamation-triangle'}"></i></div>
             <div class="hc-alert-content">
-                <strong>${h.Name || 'Genel'}</strong>
+                <div class="d-flex justify-content-between align-items-start">
+                    <strong>${h.Name || 'Genel'}</strong>
+                    <button class="btn-ai-advice" onclick="window.hcGetRemediation(this, '${h.Message.replace(/'/g, "\\'")}')">
+                        <i class="fas fa-robot"></i> Çözüm Önerisi
+                    </button>
+                </div>
                 <p>${h.Message}</p>
+                <div class="hc-remediation" id="remed-${idx}">
+                    <div class="hc-remediation-title"><i class="fas fa-lightbulb"></i> AI Çözüm Önerisi</div>
+                    <div class="hc-remediation-body">Yükleniyor...</div>
+                </div>
             </div>
         </div>
     `).join('') : '<div class="p-3 text-muted">Belirlenmiş bir sağlık sorunu bulunamadı.</div>';
@@ -1078,3 +1087,34 @@ function filterTree(searchTerm) {
         }
     });
 }
+
+window.hcGetRemediation = async function (btn, message) {
+    const parent = btn.closest('.hc-alert-content');
+    const remediationBox = parent.querySelector('.hc-remediation');
+    const body = remediationBox.querySelector('.hc-remediation-body');
+
+    // Toggle if already visible
+    if (remediationBox.classList.contains('visible')) {
+        remediationBox.classList.remove('visible');
+        return;
+    }
+
+    remediationBox.classList.add('visible');
+
+    // If already loaded, don't fetch again
+    if (body.textContent !== 'Yükleniyor...') return;
+
+    try {
+        const response = await fetch(`/api/ai/remediation?message=${encodeURIComponent(message)}`);
+        const data = await response.json();
+
+        if (data.remediation) {
+            body.innerHTML = data.remediation;
+        } else {
+            body.textContent = 'Öneri oluşturulamadı. Lütfen daha sonra tekrar deneyin.';
+        }
+    } catch (error) {
+        console.error('Remediation error:', error);
+        body.textContent = 'Hata: Öneri alınırken bir sorun oluştu.';
+    }
+};

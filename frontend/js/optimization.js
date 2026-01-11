@@ -35,6 +35,8 @@ function setupTooltips() {
     tooltip.className = 'tooltip-container';
     document.body.appendChild(tooltip);
 
+    let currentType = null;
+
     // Event delegation for opt-type-badge OR rightsizing table rows
     document.addEventListener('mouseover', (e) => {
         // Check for badge first
@@ -53,6 +55,8 @@ function setupTooltips() {
 
         const info = window.OPTIMIZATION_TYPES?.[type];
         if (!info) return;
+
+        currentType = type;
 
         // Build rich tooltip content
         let vmInfoHtml = '';
@@ -77,6 +81,12 @@ function setupTooltips() {
             <div class="tooltip-action">
                 <strong>📋 Öneri:</strong> ${info.action}
             </div>
+            <div class="tooltip-ai-section">
+                <button class="btn-ai-advice" onclick="event.stopPropagation(); window.getOptRemediation('${type}', '${info.label}')">
+                    <i class="fas fa-robot"></i> Detaylı Çözüm
+                </button>
+                <div class="tooltip-ai-result" id="opt-ai-result"></div>
+            </div>
         `;
 
         // Position tooltip near mouse
@@ -92,11 +102,46 @@ function setupTooltips() {
     document.addEventListener('mouseout', (e) => {
         const badge = e.target.closest('.opt-type-badge');
         const row = e.target.closest('#rightsizing-table tbody tr');
+        // Don't hide if mouse is over the tooltip itself
+        if (e.relatedTarget && e.relatedTarget.closest('.tooltip-container')) return;
         if (badge || row) {
             tooltip.classList.remove('visible');
         }
     });
+
+    // Keep tooltip visible when hovering over it
+    tooltip.addEventListener('mouseenter', () => {
+        tooltip.classList.add('visible');
+    });
+    tooltip.addEventListener('mouseleave', () => {
+        tooltip.classList.remove('visible');
+    });
 }
+
+// AI remediation for optimization types
+window.getOptRemediation = async function (type, label) {
+    const resultDiv = document.getElementById('opt-ai-result');
+    if (!resultDiv) return;
+
+    resultDiv.innerHTML = '<span class="loading-remediation"><i class="fas fa-spinner fa-spin"></i> Öneriler yükleniyor...</span>';
+
+    const info = window.OPTIMIZATION_TYPES?.[type];
+    const message = `VMware ${label}: ${info?.desc || ''}`;
+
+    try {
+        const response = await fetch(`/api/ai/remediation?message=${encodeURIComponent(message)}`);
+        const data = await response.json();
+
+        if (data.remediation) {
+            resultDiv.innerHTML = `<div class="hc-remediation visible"><div class="hc-remediation-body">${data.remediation}</div></div>`;
+        } else {
+            resultDiv.innerHTML = '<span class="text-muted">Öneri oluşturulamadı.</span>';
+        }
+    } catch (error) {
+        console.error('Optimization remediation error:', error);
+        resultDiv.innerHTML = '<span class="text-danger">Hata oluştu.</span>';
+    }
+};
 
 function setupPDFDropdown() {
     const dropdownBtn = document.getElementById('pdf-dropdown-btn');
