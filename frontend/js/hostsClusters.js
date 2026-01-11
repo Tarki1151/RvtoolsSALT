@@ -634,6 +634,11 @@ async function renderHostDetail(hostName, sourceName, dcName, clusterName) {
         const hbas = hwData.hbas || [];
         const vmks = hwData.vmks || [];
         const storagePaths = hwData.storage_paths || [];
+        const healthIssues = hwData.health || [];
+        const partitionAlerts = hwData.partitions || [];
+        const snapshots = hwData.snapshots || [];
+
+        const totalAlerts = healthIssues.length + partitionAlerts.length;
 
         // Real usage from ESXi
         const cpuUsage = hostData.cpu_usage_pct || 0;
@@ -662,6 +667,7 @@ async function renderHostDetail(hostName, sourceName, dcName, clusterName) {
                     <button class="hc-tab-btn" onclick="window.hcSwitchTab(this, 'hardware')">Donanım & BIOS</button>
                     <button class="hc-tab-btn" onclick="window.hcSwitchTab(this, 'network')">Network (${nics.length + vmks.length})</button>
                     <button class="hc-tab-btn" onclick="window.hcSwitchTab(this, 'storage')">Storage (${storagePaths.length || hbas.length})</button>
+                    <button class="hc-tab-btn" onclick="window.hcSwitchTab(this, 'health')">Sağlık & Uyarılar ${totalAlerts > 0 ? `<span class="badge bg-danger ms-1">${totalAlerts}</span>` : ''}</button>
                     <button class="hc-tab-btn" onclick="window.hcSwitchTab(this, 'vms')">VM'ler (${hostData.total_vms || 0})</button>
                 </div>
 
@@ -673,7 +679,9 @@ async function renderHostDetail(hostName, sourceName, dcName, clusterName) {
 
         // Store data globally for tab switching
         window.currentHostContext = {
-            hostData, hw, nics, hbas, vmks, storagePaths, sourceName, clusterName,
+            hostData, hw, nics, hbas, vmks, storagePaths,
+            healthIssues, partitionAlerts, snapshots,
+            sourceName, clusterName,
             cpuUsage, ramUsage, vcpuRatio, vramRatio
         };
 
@@ -764,6 +772,7 @@ window.hcSwitchTab = function (btn, tabId) {
         case 'hardware': content.innerHTML = renderHardwareTab(ctx.hw); break;
         case 'network': content.innerHTML = renderNetworkTab(ctx.nics, ctx.vmks); break;
         case 'storage': content.innerHTML = renderStorageTab(ctx.hbas, ctx.storagePaths); break;
+        case 'health': content.innerHTML = renderHealthTab(ctx.healthIssues, ctx.partitionAlerts, ctx.snapshots); break;
         case 'vms': content.innerHTML = renderVMsTab(ctx.hostData.vms, ctx.sourceName); break;
     }
 };
@@ -962,6 +971,74 @@ function renderBasicHostDetail(hostData, hostName, clusterName, sourceName) {
             </div>
             <div class="p-4">Donanım bilgileri alınamadı. Sadece temel bilgiler gösteriliyor.</div>
             ${renderVMsTab(hostData.vms, sourceName)}
+        </div>
+    `;
+}
+
+function renderHealthTab(health, partitions, snapshots) {
+    let healthRows = health.length ? health.map(h => `
+        <div class="hc-alert-item ${h['Message type'] === 'Critical' ? 'critical' : 'warning'}">
+            <div class="hc-alert-icon"><i class="fas ${h['Message type'] === 'Critical' ? 'fa-times-circle' : 'fa-exclamation-triangle'}"></i></div>
+            <div class="hc-alert-content">
+                <strong>${h.Name || 'Genel'}</strong>
+                <p>${h.Message}</p>
+            </div>
+        </div>
+    `).join('') : '<div class="p-3 text-muted">Belirlenmiş bir sağlık sorunu bulunamadı.</div>';
+
+    let partitionRows = partitions.length ? partitions.map(p => `
+        <tr>
+            <td><strong>${p.VM}</strong></td>
+            <td>${p.Disk || '-'}</td>
+            <td>${formatNumber(p['Capacity MiB'] / 1024)} GB</td>
+            <td><span class="text-danger"><strong>%${p['Free %']}</strong></span></td>
+            <td>${formatNumber(p['Free MiB'] / 1024)} GB</td>
+        </tr>
+    `).join('') : '<tr><td colspan="5" class="text-center text-muted">Kritik seviyede dolu disk bulunamadı.</td></tr>';
+
+    let snapRows = snapshots.length ? snapshots.map(s => `
+        <tr>
+            <td><strong>${s.VM}</strong></td>
+            <td>${s.Name || '-'}</td>
+            <td>${formatNumber(s['Size MiB (total)'] / 1024)} GB</td>
+            <td>${s['Date / time'] || '-'}</td>
+        </tr>
+    `).join('') : '<tr><td colspan="4" class="text-center text-muted">Snapshot bulunamadı.</td></tr>';
+
+    return `
+        <div class="hc-tab-pane active fade-in">
+            <div class="hc-section">
+                <h3><i class="fas fa-heartbeat"></i> RVTools Sağlık Kontrolleri</h3>
+                <div class="hc-alerts-list mb-4">
+                    ${healthRows}
+                </div>
+            </div>
+
+            <div class="hc-grid-2">
+                <div class="hc-section">
+                    <h3><i class="fas fa-exclamation-circle"></i> VM OS-Disk Uyarıları (< %10 Boş)</h3>
+                    <div class="table-container">
+                        <table class="data-table compact">
+                            <thead>
+                                <tr><th>VM</th><th>Disk</th><th>Kapasite</th><th>Boş %</th><th>Boş GB</th></tr>
+                            </thead>
+                            <tbody>${partitionRows}</tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="hc-section">
+                    <h3><i class="fas fa-camera"></i> Güncel Snapshotlar</h3>
+                    <div class="table-container">
+                        <table class="data-table compact">
+                            <thead>
+                                <tr><th>VM</th><th>Snapshot Adı</th><th>Boyut</th><th>Tarih</th></tr>
+                            </thead>
+                            <tbody>${snapRows}</tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </div>
     `;
 }

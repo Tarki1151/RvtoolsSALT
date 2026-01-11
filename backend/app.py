@@ -25,7 +25,14 @@ def init_db():
     """Initialize SQLite database from Excel files"""
     print("Initializing Database...")
     conn = sqlite3.connect('rvtools.db')
+    cursor = conn.cursor()
     
+    # Clear existing data but keep custom_notes
+    tables = cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('custom_notes', 'sqlite_sequence');").fetchall()
+    for table in tables:
+        cursor.execute(f"DROP TABLE IF EXISTS \"{table[0]}\"")
+    conn.commit()
+
     excel_files = glob.glob(os.path.join(DATA_DIR, "*.xlsx"))
     
     for file_path in excel_files:
@@ -34,20 +41,43 @@ def init_db():
         try:
             xls = pd.ExcelFile(file_path)
             for sheet_name in xls.sheet_names:
-                df = pd.read_excel(xls, sheet_name)
-                df['Source'] = source_name
+                try:
+                    df = pd.read_excel(xls, sheet_name)
+                    df['Source'] = source_name
+                    
+                    # Robust type conversion
+                    for col in df.columns:
+                        if pd.api.types.is_timedelta64_dtype(df[col]):
+                            df[col] = df[col].astype(str)
+                        elif pd.api.types.is_datetime64_any_dtype(df[col]):
+                            df[col] = df[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+                        else:
+                            # Catch complex objects like python timedeltas or mixed types
+                            df[col] = df[col].apply(lambda x: str(x) if isinstance(x, (timedelta, pd.Timedelta)) else x)
+
+                    # Dynamic Schema Evolution
+                    cursor.execute(f"PRAGMA table_info(\"{sheet_name}\")")
+                    existing_cols = [row[1] for row in cursor.fetchall()]
+                    
+                    if existing_cols:
+                        for col in df.columns:
+                            if col not in existing_cols:
+                                print(f"Adding column {col} to {sheet_name}")
+                                cursor.execute(f"ALTER TABLE \"{sheet_name}\" ADD COLUMN \"{col}\" TEXT")
+                        conn.commit()
+
+                    # Write data
+                    df.to_sql(sheet_name, conn, if_exists='append', index=False)
+                except Exception as sheet_err:
+                    print(f"Error importing sheet {sheet_name} from {filename}: {sheet_err}")
                 
-                # Append to DB table (table name = sheet name)
-                # Note: This appends, so restarting app doubles data unless we clear first.
-                # For this session, we drop tables or replace. 'replace' is safer for restart logic.
-                df.to_sql(sheet_name, conn, if_exists='replace', index=False) 
-                
-            print(f"Imported {filename} to DB")
+            print(f"Finished processing {filename}")
         except Exception as e:
-            print(f"Error importing {filename}: {e}")
+            print(f"Error opening {filename}: {e}")
+            import traceback
+            traceback.print_exc()
             
-    
-    # Create custom_notes table if not exists (Persistent)
+    # Create custom_notes table if not exists
     conn.execute('''
         CREATE TABLE IF NOT EXISTS custom_notes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -58,10 +88,9 @@ def init_db():
             UNIQUE(target_type, target_name)
         )
     ''')
-    
     conn.commit()
     conn.close()
-    print("Database Initialized.")
+    print("Database Initialized Successfully.")
 
 @app.route('/api/notes', methods=['GET', 'POST'])
 def api_notes():
@@ -2009,7 +2038,7 @@ def api_export_pdf(report_type):
 
 @app.route('/api/host_hardware/<host_name>')
 def api_host_hardware(host_name):
-    """Get detailed hardware info for a specific host (HBAs, NICs, Physical specs, VMKs, Storage)"""
+    """Get detailed hardware info and additional health/config for a specific host"""
     conn = sqlite3.connect('rvtools.db')
     conn.row_factory = sqlite3.Row
     
@@ -2022,34 +2051,58 @@ def api_host_hardware(host_name):
         
         host_dict = dict(host_info)
         
-        # 2. Get HBAs from vHBA
+        # 2. Get HBAs
         cursor = conn.execute("SELECT * FROM vHBA WHERE Host=?", (host_name,))
         hbas = [dict(row) for row in cursor.fetchall()]
         
-        # 3. Get NICs from vNIC
+        # 3. Get NICs
         cursor = conn.execute("SELECT * FROM vNIC WHERE Host=?", (host_name,))
         nics = [dict(row) for row in cursor.fetchall()]
         
-        # 4. Get VMKs from vSC_VMK (NEW)
+        # 4. Get VMKs
         try:
             cursor = conn.execute("SELECT * FROM vSC_VMK WHERE Host=?", (host_name,))
             vmks = [dict(row) for row in cursor.fetchall()]
         except:
             vmks = []
 
-        # 5. Get Storage Disks from vMultiPath (NEW) - Host'un gördüğü fiziksel diskler
+        # 5. Get Storage Disks from vMultiPath
         try:
             cursor = conn.execute("SELECT * FROM vMultiPath WHERE Host=?", (host_name,))
             paths = [dict(row) for row in cursor.fetchall()]
         except:
             paths = []
 
-        # 6. Get Switches from vSwitch
+        # 6. Get Health Issues (Filter by Host name or VM names on this host)
         try:
-            cursor = conn.execute("SELECT * FROM vSwitch WHERE Host=?", (host_name,))
-            switches = [dict(row) for row in cursor.fetchall()]
+            # First get VM list on this host
+            cursor = conn.execute("SELECT VM FROM vInfo WHERE Host=?", (host_name,))
+            vm_names = [row[0] for row in cursor.fetchall()]
+            
+            # Search vHealth for host or its VMs
+            placeholders = ','.join(['?'] * (len(vm_names) + 1))
+            query = f"SELECT * FROM vHealth WHERE Name IN ({placeholders}) OR Message LIKE ?"
+            params = vm_names + [host_name, f"%{host_name}%"]
+            cursor = conn.execute(query, params)
+            health = [dict(row) for row in cursor.fetchall()]
         except:
-            switches = []
+            health = []
+
+        # 7. Get Critical Partitions for VMs on this host
+        try:
+            placeholders = ','.join(['?'] * len(vm_names))
+            cursor = conn.execute(f"SELECT * FROM vPartition WHERE VM IN ({placeholders}) AND \"Free %\" < 10", vm_names)
+            partitions = [dict(row) for row in cursor.fetchall()]
+        except:
+            partitions = []
+
+        # 8. Get Snapshots for VMs on this host
+        try:
+            placeholders = ','.join(['?'] * len(vm_names))
+            cursor = conn.execute(f"SELECT * FROM vSnapshot WHERE VM IN ({placeholders})", vm_names)
+            snapshots = [dict(row) for row in cursor.fetchall()]
+        except:
+            snapshots = []
 
         return jsonify({
             'hardware': host_dict,
@@ -2057,10 +2110,14 @@ def api_host_hardware(host_name):
             'nics': nics,
             'vmks': vmks,
             'storage_paths': paths,
-            'switches': switches
+            'health': health,
+            'partitions': partitions,
+            'snapshots': snapshots
         })
         
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:
         conn.close()
