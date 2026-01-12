@@ -1885,49 +1885,93 @@ th.sortable.desc i {
 .tooltip-container {
     position: fixed;
     z-index: 10000;
-    padding: 12px 16px;
-    background: rgba(20, 20, 30, 0.95);
-    color: #fff;
-    border-radius: 8px;
+    padding: 10px 14px;
+    background: #1a1f2e;
+    color: #e2e8f0;
+    border-radius: 10px;
     font-size: 0.85rem;
-    max-width: 350px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    pointer-events: none;
+    max-width: 340px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1);
+    border: 1px solid #3b82f6;
+    /* Accent border to distinguish */
+    pointer-events: auto;
+    /* Enable hover/click on buttons inside */
     opacity: 0;
-    transition: opacity 0.2s ease;
-    white-space: pre-line;
-    line-height: 1.5;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    transform: translateY(10px);
+    white-space: normal;
+    line-height: 1.4;
 }
 
 .tooltip-container.visible {
     opacity: 1;
+    transform: translateY(0);
 }
 
 .tooltip-container .tooltip-title {
-    font-weight: 600;
-    color: var(--accent-color);
-    margin-bottom: 8px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 6px;
     display: flex;
     align-items: center;
     gap: 8px;
+    font-size: 0.95rem;
+}
+
+.tooltip-vm-context {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 4px 8px;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    font-size: 0.75rem;
+    color: #94a3b8;
+    display: flex;
+    gap: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .tooltip-container .tooltip-desc {
-    margin-bottom: 10px;
-    color: #ccc;
+    margin-bottom: 8px;
+    color: #cbd5e1;
 }
 
 .tooltip-container .tooltip-action {
-    background: rgba(var(--accent-rgb), 0.2);
-    padding: 8px 12px;
+    background: rgba(59, 130, 246, 0.1);
+    padding: 6px 10px;
     border-radius: 6px;
     font-size: 0.8rem;
-    border-left: 3px solid var(--accent-color);
+    border-left: 3px solid #3b82f6;
+    margin-top: 4px;
 }
 
 .tooltip-container .tooltip-action strong {
-    color: var(--accent-color);
+    color: #60a5fa;
+}
+
+.tooltip-ai-section {
+    margin-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    padding-top: 8px;
+}
+
+.btn-ai-advice {
+    width: 100%;
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: filter 0.2s;
+}
+
+.btn-ai-advice:hover {
+    filter: brightness(1.2);
 }
 
 /* =============================================
@@ -3456,11 +3500,6 @@ th.sortable.sorted i {
     overflow-y: auto;
 }
 
-.tooltip-container {
-    max-width: 380px;
-    max-height: 450px;
-    overflow-y: auto;
-}
 
 /* VM Page - Sticky Header & Table Layout */
 #page-vms.active {
@@ -3590,6 +3629,7 @@ th.sortable.sorted i {
 #vms-table td:nth-child(8) {
     width: 18%;
 }
+
 /* =============================================
    DR ANALYSIS PAGE
    ============================================= */

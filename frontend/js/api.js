@@ -66,7 +66,7 @@ export async function fetchSources() {
 }
 
 export async function fetchRightSizing() {
-    const response = await fetch(`${API_BASE}/reports/rightsizing`);
+    const response = await fetch(`${API_BASE}/rightsizing`);
     return response.json();
 }
 

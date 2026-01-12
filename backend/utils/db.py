@@ -126,15 +126,22 @@ def get_all_sources():
 
 
 def get_combined_data(sheet_name):
-    """Get combined data from all sources"""
-    all_data = []
-    for source in get_all_sources():
-        df = load_excel_data(source['filename'], sheet_name).copy()
-        df['Source'] = source['name']
-        all_data.append(df)
-    if all_data:
-        return pd.concat(all_data, ignore_index=True)
-    return pd.DataFrame()
+    """Get combined data from all sources via SQLite (much faster than Excel)"""
+    conn = sqlite3.connect('rvtools.db')
+    try:
+        # Check if table exists first
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{sheet_name}';")
+        if not cursor.fetchone():
+            return pd.DataFrame()
+            
+        df = pd.read_sql_query(f'SELECT * FROM "{sheet_name}"', conn)
+        return df
+    except Exception as e:
+        print(f"Error reading from DB ({sheet_name}): {e}")
+        return pd.DataFrame()
+    finally:
+        conn.close()
 
 
 def clear_cache():

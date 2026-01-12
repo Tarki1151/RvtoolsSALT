@@ -61,9 +61,8 @@ function setupTooltips() {
         if (row && row.dataset.vm) {
             vmInfoHtml = `
                 <div class="tooltip-vm-context">
-                    <i class="fas fa-info-circle"></i>
-                    <span><strong>DC:</strong> ${row.dataset.dc || '-'}</span> | 
-                    <span><strong>Cluster:</strong> ${row.dataset.cluster || '-'}</span>
+                    <span><i class="fas fa-map-marker-alt"></i> ${row.dataset.dc || '-'}</span>
+                    <span><i class="fas fa-layer-group"></i> ${row.dataset.cluster || '-'}</span>
                 </div>
             `;
         }
@@ -80,7 +79,7 @@ function setupTooltips() {
             </div>
             <div class="tooltip-ai-section">
                 <button class="btn-ai-advice" onclick="event.stopPropagation(); window.getOptRemediation('${type}', '${info.label}')">
-                    <i class="fas fa-robot"></i> Detaylı Çözüm
+                    <i class="fas fa-robot"></i> Yapay Zeka Çözüm Önerisi
                 </button>
                 <div class="tooltip-ai-result" id="opt-ai-result"></div>
             </div>
@@ -90,8 +89,19 @@ function setupTooltips() {
         const target = badge || e.target.closest('#rightsizing-table tbody tr');
         if (target) {
             const rect = target.getBoundingClientRect();
+            // Decide whether to show above or below the target
+            const spaceBelow = window.innerHeight - rect.bottom;
+            const tooltipHeight = 250; // estimate
+
+            if (spaceBelow < tooltipHeight) {
+                tooltip.style.top = 'auto';
+                tooltip.style.bottom = (window.innerHeight - rect.top + 10) + 'px';
+            } else {
+                tooltip.style.bottom = 'auto';
+                tooltip.style.top = (rect.bottom + 8) + 'px';
+            }
+
             tooltip.style.left = Math.min(rect.left + 20, window.innerWidth - 370) + 'px';
-            tooltip.style.top = (rect.bottom + 8) + 'px';
             tooltip.classList.add('visible');
         }
     });
@@ -228,8 +238,11 @@ function renderHierarchyFilter() {
         foundClusters.add(cluster);
     });
 
-    // Populate selectedClusters if it was empty (initial load)
-    if (selectedClusters.size === 0) {
+    // Populate selectedClusters with all found clusters on first data load
+    // or if current selection is completely outside of the new cluster set
+    const currentMatches = Array.from(foundClusters).filter(c => selectedClusters.has(c));
+    if (selectedClusters.size === 0 || currentMatches.length === 0) {
+        selectedClusters.clear();
         foundClusters.forEach(c => selectedClusters.add(c));
     }
 

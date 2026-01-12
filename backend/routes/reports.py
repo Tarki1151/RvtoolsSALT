@@ -281,17 +281,67 @@ def api_disk_waste():
 
 @reports_bp.route('/pdf/<report_type>')
 def api_export_pdf(report_type):
-    """Generate PDF report with Turkish character support"""
+    """Generate PDF report with actual optimization data"""
     from pdf_generator import generate_optimization_pdf
+    from routes.optimization import (
+        check_cpu_underutilization, check_eol_os, check_old_hw, 
+        check_vm_tools, check_old_snapshots, check_legacy_nics, 
+        get_zombie_vms, safe_merge_vinfo
+    )
     
     try:
-        # For now, return empty PDF with message
-        # This will be reimplemented with new optimization logic
-        logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'frontend', 'images', 'logo.png')
+        # Load necessary data for all checks
+        vinfo = get_combined_data('vInfo').copy()
+        vcpu = get_combined_data('vCPU').copy()
+        vtools = get_combined_data('vTools').copy()
+        vsnapshot = get_combined_data('vSnapshot').copy()
+        vnetwork = get_combined_data('vNetwork').copy()
+        vhost = get_combined_data('vHost').copy()
+
+        # Helper data
+        vhost_info = {row['Host']: {'speed': row.get('Speed', 2400)} for _, row in vhost.iterrows()}
+        vhost_versions = {
+            row['Host']: 13 if '6.5' in str(row.get('ESX Version', '')) 
+            else 14 if '6.7' in str(row.get('ESX Version', '')) 
+            else 19 if '7.0' in str(row.get('ESX Version', '')) or '8.0' in str(row.get('ESX Version', ''))
+            else 17 for _, row in vhost.iterrows()
+        }
+
+        # Core merged data
+        vcpu = safe_merge_vinfo(vcpu, vinfo)
+        vtools = safe_merge_vinfo(vtools, vinfo)
+        vsnapshot = safe_merge_vinfo(vsnapshot, vinfo)
+        vnetwork = safe_merge_vinfo(vnetwork, vinfo)
+
+        # Run all checks
+        all_recs = []
+        all_recs.extend(check_cpu_underutilization(vcpu, vhost_info))
+        all_recs.extend(check_eol_os(vinfo))
+        all_recs.extend(check_old_hw(vinfo, vhost_versions))
+        all_recs.extend(check_vm_tools(vtools, vinfo))
+        all_recs.extend(check_old_snapshots(vsnapshot))
+        all_recs.extend(check_legacy_nics(vnetwork))
+        all_recs.extend(get_zombie_vms())
+
+        # Filter by report_type if needed
+        if report_type != 'all' and report_type != 'rightsizing':
+            # Map frontend types to backend types if they differ
+            type_map = {
+                'diskwaste': 'ZOMBIE_DISK',
+                'zombies': 'ZOMBIE_DISK'
+            }
+            target_type = type_map.get(report_type, report_type)
+            filtered_data = [r for r in all_recs if r['type'] == target_type]
+        else:
+            filtered_data = all_recs
+
+        logo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'frontend', 'images', 'logo.png')
+        if not os.path.exists(logo_path):
+             logo_path = None # Fallback if logo missing
         
-        pdf_buffer = generate_optimization_pdf([], report_type, logo_path)
+        pdf_buffer = generate_optimization_pdf(filtered_data, report_type, logo_path)
         
-        filename = f"RVTools_{report_type}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+        filename = f"RVTools_Optimization_{report_type}_{datetime.now().strftime('%Y%m%d')}.pdf"
         
         return Response(
             pdf_buffer.getvalue(),
@@ -303,4 +353,7 @@ def api_export_pdf(report_type):
         )
         
     except Exception as e:
+        print(f"PDF Export Error: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500

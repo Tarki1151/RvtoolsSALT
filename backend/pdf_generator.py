@@ -41,158 +41,77 @@ def generate_optimization_pdf(rightsizing_data, report_type, logo_path=None):
         BytesIO buffer containing PDF data
     """
     
-    # Type names mapping
+    # Type names mapping (Used ASCII as requested)
     type_names = {
         'all': 'Tum Optimizasyon Onerileri',
         'rightsizing': 'Right-Sizing Onerileri',
-        'POWERED_OFF_DISK': 'Kapali VM - Disk Kullanimi',
-        'CPU_UNDERUTILIZED': 'Dusuk CPU Kullanimi',
+        'LOW_CPU_USAGE': 'Dusuk CPU Kullanimi',
         'EOL_OS': 'EOL Isletim Sistemleri',
         'OLD_HW_VERSION': 'Eski Hardware Versiyonlari',
         'VM_TOOLS': 'VMware Tools Sorunlari',
-        'CPU_LIMIT': 'CPU Limiti Tanimli VMler',
         'OLD_SNAPSHOT': 'Eski Snapshotlar (>7 gun)',
         'LEGACY_NIC': 'Eski Ag Kartlari (E1000)',
-        'CONSOLIDATE_SNAPSHOTS': 'Snapshot Birlestirme'
+        'ZOMBIE_DISK': 'Zombie (Orphan) Diskler',
+        'ZOMBIE_RESOURCE': 'Zombie Kaynaklar'
     }
     
     # Detailed explanations for each optimization type (for PDF first page)
     type_explanations = {
-        'POWERED_OFF_DISK': {
-            'title': 'Kapali VM - Disk Kullanimi',
-            'problem': 'Bu VMler kapali durumda ancak disk alani hala kullaniliyor. Kapali VMler CPU ve RAM tuketmez ancak depolama maliyetine devam eder.',
-            'risk': 'Gereksiz depolama maliyeti, datastore alaninin israfi, yedekleme surelerinin uzamasi.',
-            'action': '1. VM artik gerekli degilse tamamen silin. 2. Yedek/DR amacliysa template\'e donusturun. 3. Arsiv gerekiyorsa export edip datatore\'dan kaldirin.'
-        },
-        'CPU_UNDERUTILIZED': {
-            'title': 'Dusuk CPU Kullanimi',
-            'problem': 'VM\'e atanan vCPU sayisi, uygulama ihtiyacindan fazla. vCPU kullanimi surekli %50\'nin altinda kaliyor.',
-            'risk': 'Fazla vCPU, ESXi scheduler overhead\'i arttirir ve performansi dusurur. Diger VM\'lerin kaynak erisimini engeller.',
-            'action': '1. vCPU sayisini azaltin (genellikle yarisina indirin). 2. NUMA uyumu icin: Cores per Socket sayisini host NUMA node core sayisina bolunebilir yapin (ornek: 8 vCPU = 1x8 veya 2x4). 3. Degisiklik sonrasi 1 hafta izleyin.'
+        'LOW_CPU_USAGE': {
+            'title': 'Dusuk CPU Kullanimi (Right-Sizing)',
+            'problem': 'VM\'e atanan vCPU sayisi, uygulama ihtiyacindan fazla. vCPU kullanimi surekli %10\'un altinda kaliyor.',
+            'risk': 'Fazla vCPU, ESXi scheduler overhead\'i arttirir ve performansi dusurur (CPU Ready/Costop). Kaynak israfi.',
+            'action': 'vCPU sayisini kademeli olarak azaltin ve performansi 48 saat izleyin.'
         },
         'EOL_OS': {
             'title': 'EOL (End-of-Life) Isletim Sistemi',
-            'problem': 'Bu VMler artik uretici tarafindan desteklenmeyen isletim sistemleri kullaniyor (ornegin: Windows Server 2008, CentOS 6).',
-            'risk': 'KRITIK GUVENLIK RISKI! Yeni guvenlik yamalari alinmiyor. Uyumluluk ve compliance sorunlari. Yapay Risk skoru nagatifolarak etkileniyor.',
-            'action': '1. ACIL olarak guncel isletim sistemine migrate edin. 2. Mumkun degilse network izolasyonu uygulayin. 3. Ozel risk degerlendirmesi ve dokumantasyon hazirlatin.'
+            'problem': 'Bu VMler artik uretici tarafindan desteklenmeyen isletim sistemleri kullaniyor.',
+            'risk': 'KRITIK GUVENLIK RISKI! Yeni guvenlik yamalari alinmiyor. Uyumluluk ve compliance sorunlari.',
+            'action': 'ACIL olarak guncel isletim sistemine migrate edin veya network izolasyonu uygulayin.'
         },
         'OLD_HW_VERSION': {
             'title': 'Eski VM Hardware Versiyonu',
-            'problem': 'VM\'in hardware versiyonu, ESXi host\'un destekledigi maksimum versiyonun altinda.',
-            'risk': 'Yeni ozellikler (USB 3.0, NVMe, vPMEM) kullanilamaz. Performans iyilestirmelerinden yararlanilamaz. vMotion uyumluluk sorunlari.',
-            'action': '1. VM\'i kapatin. 2. vCenter/ESXi uzerinden hardware upgrade yapin. 3. VMware Tools\'u guncelleyin. 4. VM\'i tekrar baslatip test edin.'
+            'problem': 'VM hardware versiyonu, ESXi hostun destekledigi maksimum versiyonun altinda.',
+            'risk': 'Yeni ozellikler kullanilamaz. Performans iyilestirmelerinden yararlanilamaz. vMotion uyumluluk sorunlari.',
+            'action': 'VM\'i kapatip hardware upgrade yapın ve VMware Tools\'u guncelleyin.'
         },
         'VM_TOOLS': {
             'title': 'VMware Tools Sorunu',
             'problem': 'VMware Tools kurulu degil, guncel degil veya calismiyor.',
             'risk': 'Zaman senkronizasyonu bozuk, quiesced snapshot alinmaz, vMotion sirasinda sorun, performans metrikleri eksik.',
-            'action': '1. VMware Tools\'un son surumunu kurun. 2. Otomatik upgrade politikasi aktifleyin. 3. Guest OS saat senkronizasyonunu kontrol edin.'
-        },
-        'CPU_LIMIT': {
-            'title': 'CPU Limiti Tanimli',
-            'problem': 'VM\'e CPU limiti tanimlanmis. Host\'ta kaynak olsa bile VM bu kaynagi kullanamaz.',
-            'risk': 'PERFORMANS SORUNU! Uygulama yavaslar, kullanici sikayetleri artar. Limit genellikle yanlis cozumdur.',
-            'action': '1. CPU limitini kaldirin (Unlimited yapin). 2. Kaynak onceliklendirme gerekiyorsa Shares veya Reservation kullanin. 3. Degisiklik sonrasi performansi izleyin.'
-        },
-        'RAM_LIMIT': {
-            'title': 'RAM Limiti Tanimli',
-            'problem': 'VM\'e memory limiti tanimlanmis. Bu, ballooning ve swapping\'e neden olur.',
-            'risk': 'CIDDI PERFORMANS SORUNU! Memory limiti neredeyse hicbir zaman dogru cozum degildir. Uygulamalar yavaslar veya coker.',
-            'action': '1. Memory limitini hemen kaldirin. 2. Eger host memory yetersizse, VM\'leri baska host\'lara dagitin veya RAM ekleyin.'
+            'action': 'VMware Tools\'un son surumunu kurun ve otomatik upgrade politikasini aktifleyin.'
         },
         'OLD_SNAPSHOT': {
             'title': 'Eski Snapshot (>7 Gun)',
-            'problem': 'Bu snapshot 7 gunden uzak suredir mevcut. Snapshotlar gecici olmali, kalici yedek degil.',
-            'risk': 'I/O performansi duser (her yazma isleminde delta disk buyur). Datastore dolar. Yedekleme uzar.',
-            'action': '1. Snapshot artik gereksizse hemen silin (Delete). 2. Gecerli bir nedeniniz varsa belgeleyin. 3. Snapshot = yedek degildir, dogru yedekleme cozumu kullanin.'
+            'problem': 'Snapshot 7 gunden uzun suredir mevcut. Snapshotlar gecici olmali, kalici yedek degil.',
+            'risk': 'I/O performansi duser (delta disk buyur). Datastore dolar. Yedekleme sureleri uzar.',
+            'action': 'Snapshot artik gereksizse hemen silin (Consolidate/Delete).'
         },
         'LEGACY_NIC': {
             'title': 'Eski Ag Karti (E1000/E1000E)',
-            'problem': 'VM, emule edilen eski E1000 ag kartini kullaniyor. Bu, VMXNET3\'e gore cok yavas.',
-            'risk': '10 kata kadar dusuk ag performansi. Yuksek CPU kullanimi. Bazi ozellikler (TSO, LRO) desteklenmez.',
-            'action': '1. NIC tipini VMXNET3 olarak degistirin. 2. Guest OS\'te driver otomatik yuklenecektir. 3. IP konfigurasyonunu kontrol edin (MAC adresi degisir).'
+            'problem': 'VM, emule edilen eski E1000 ag kartini kullaniyor. VMXNET3\'e gore cok daha verimsiz.',
+            'risk': 'Dusuk ag performansi. Yuksek CPU kullanimi. Modern offload ozellikleri desteklenmez.',
+            'action': 'NIC tipini VMXNET3 olarak degistirin. MAC adresi degisebilir, IP kontrolu yapin.'
         },
-        'CONSOLIDATE_SNAPSHOTS': {
-            'title': 'Snapshot Birlestirme Gerekli',
-            'problem': 'Birden fazla snapshot zinciri var. Her ek snapshot I/O performansini dusurur.',
-            'risk': 'Yigin halinde I/O gecikmesi. Storage alani asiri tuketilir. Snapshot silme islemleri uzar veya basarisiz olabilir.',
-            'action': '1. Gereksiz snapshotlari silin (en eskisinden baslayin). 2. vCenter\'da Consolidate secenegini kullanin. 3. Islem sirasinda I/O yuku olacagini bilerek plankayarak yapin.'
-        },
-        'MEMORY_BALLOON': {
-            'title': 'Memory Ballooning Aktif',
-            'problem': 'ESXi host, bu VM\'den memory geri aliyor cunku host\'ta yeterli fiziksel RAM yok.',
-            'risk': 'KRITIK PERFORMANS SORUNU! VM\'deki uygulamalar yavaslar veya out-of-memory hatalari verir. Kullanici deneyimi bozulur.',
-            'action': '1. Host\'a fiziksel RAM ekleyin. 2. Bazi VM\'leri baska host\'lara migrate edin. 3. Gereksiz VM\'lerin memory\'sini azaltin. ACIL MUDAHALE GEREKLI!'
-        },
-        'MEMORY_SWAP': {
-            'title': 'Memory Swapping Aktif',
-            'problem': 'VM memory\'si diske swap ediliyor. Bu, ballooning\'den de kotu bir durumdur.',
-            'risk': 'KRITIK! Disk I/O, RAM\'e gore 1000x yavas. Uygulamalar cok yavas calisir veya zaman asimina ugrar.',
-            'action': '1. ACIL: Host\'a RAM ekleyin veya VM\'leri baska host\'lara tasiyin. 2. Swap 0\'a dusene kadar izleyin. 3. Kapasite planlamasini gozden gecirin.'
-        },
-        'HOST_CPU_OVERCOMMIT': {
-            'title': 'Host CPU Overcommit',
-            'problem': 'Bu host\'ta toplam vCPU sayisi, fiziksel core sayisina gore yuksek oranda. CPU contention riski var.',
-            'risk': 'VM\'ler CPU beklerken %READY suresi artar. Uygulamalar yavaslar. Gizli performans sorunlari olusur.',
-            'action': '1. VM\'leri daha az yuklu host\'lara dagitin. 2. Dusuk kullanilan VM\'lerin vCPU\'larini azaltin. 3. Intel icin <6:1, AMD icin <8:1 oran hedefleyin.'
-        },
-        'DATASTORE_LOW_SPACE': {
-            'title': 'Datastore Dusuk Alan',
-            'problem': 'Datastore\'da bos alan kritik seviyenin altinda (%15\'in altinda).',
-            'risk': 'YUKSEK RISK! VM\'ler dururabilir, snapshot alinamaz, vMotion calismaz. Sistemler tamamen durabilir.',
-            'action': '1. ACIL temizlik yapin: eski snapshot, orphan disk, template. 2. Kapali VM\'leri farkli datastore\'a tasiyin. 3. Kapasite eklemeplanlayinin.'
-        },
-        'DATASTORE_OVERCOMMIT': {
-            'title': 'Datastore Overcommit',
-            'problem': 'Thin provisioned diskler toplam kapasitenin uzerinde provision edilmis.',
-            'risk': 'Thin diskler buyudukce datastore tamamen dolabilir. Ani kapasite sorunu yasanabilir.',
-            'action': '1. Datastore kullanimini yakindan izleyin. 2. Alarmlari dogru ayarlayin. 3. Kritik VM\'leri thick provision veya ayri datastore\'a tasiyin.'
-        },
-        'ZOMBIE_RESOURCE': {
-            'title': 'Unutulmus Kaynak (Bagli CD/ISO)',
-            'problem': 'VM\'e CD/ISO mount edilmis durumda. Bu genellikle kurulum sonrasi unutulur.',
-            'risk': 'vMotion sirasinda sorun cikarabilir. Datastore\'a bagli ISO erisimi olmadisinda VM baslatmas basarisiz olabilir. Guvenlik riski.',
-            'action': '1. CD/ISO\'yu disconnect edin. 2. Eger gerekli degilse tamamen kaldirin. 3. DRS ve vMotion uyumlulugunu kontrol edin.'
-        },
-        'NUMA_ALIGNMENT': {
-            'title': 'NUMA Hizalama Sorunu',
-            'problem': 'VM\'e tek sayida vCPU atanmis. Modern islemcilerde her NUMA node cift sayida core icerir. Tek sayida vCPU bu yapiyi bozar.',
-            'risk': 'Cross-NUMA memory erisimi performansi %30\'a kadar dusurur. CPU cache verimli kullanilamaz. Scheduler ek yuk getirir.',
-            'action': '1. vCPU sayisini cift sayiya yuvarlayuin (5->6 veya 5->4). 2. VM Settings > CPU > Cores per Socket ayarini fiziksel NUMA node core sayisina bolunebilir yapin. Ornek: 8 vCPU icin 2 socket x 4 core veya 1 socket x 8 core kullanin. 3. Host\'un NUMA topolojisini esxtop veya vscsiStats ile kontrol edin.'
-        },
-        'FLOPPY_CONNECTED': {
-            'title': 'Floppy Surucu Bagli',
-            'problem': 'VM\'de floppy surucu bagli. Bu eski bir cihaz ve modern ortamlarda gereksiz.',
-            'risk': 'Potansiyel guvenlik riski. Migration sorunlari. Gereksiz konfigurasyon karmasikligi.',
-            'action': '1. Floppy surucuyu disconnect edin. 2. Gerekli degilse VM konfigurasyonundan kaldirin.'
-        },
-        'STORAGE_OVERPROVISIONED': {
-            'title': 'Fazla Provision Edilmis Storage',
-            'problem': 'VM\'e provision edilen disk alani, gercekte kullanilan alandan cok yuksek (3x veya daha fazla).',
-            'risk': 'Datastore alani israf ediliyor. Kapasite planlamasi yaniltici oluyor.',
-            'action': '1. Disk boyutunu kucultunemez ama temizlik yapin. 2. Yeni VM\'ler icin dogru boyutlandirma yapin. 3. Storage vMotion ile thin provisioning kullanin.'
+        'ZOMBIE_DISK': {
+            'title': 'Zombie (Orphaned) Disk Dosyasi',
+            'problem': 'Datastore\'da disk dosyasi var ancak hicbir VM konfigurasyonuna kayitli degil.',
+            'risk': 'Storage israfi. Karmasik envanter yonetimi. Yedekleme ve temizlik sureclerinde kafa karisikligi.',
+            'action': 'Dosyalari inceleyin. Kesinlikle kullanilmadigindan eminseniz datastore\'dan kalici olarak silin.'
         }
     }
     
     # Type labels for table
     type_labels = {
-        'POWERED_OFF_DISK': 'Kapali VM',
-        'CPU_UNDERUTILIZED': 'Dusuk CPU',
+        'LOW_CPU_USAGE': 'Dusuk CPU',
         'EOL_OS': 'EOL OS',
         'OLD_HW_VERSION': 'Eski HW',
         'VM_TOOLS': 'VM Tools',
-        'CPU_LIMIT': 'CPU Limit',
-        'RAM_LIMIT': 'RAM Limit',
         'OLD_SNAPSHOT': 'Eski Snapshot',
         'LEGACY_NIC': 'Eski NIC',
-        'CONSOLIDATE_SNAPSHOTS': 'Snapshot',
-        'MEMORY_BALLOON': 'Ballooning',
-        'MEMORY_SWAP': 'Swapping',
-        'HOST_CPU_OVERCOMMIT': 'CPU Overcommit',
-        'DATASTORE_LOW_SPACE': 'Dusuk Alan',
-        'DATASTORE_OVERCOMMIT': 'DS Overcommit',
+        'ZOMBIE_DISK': 'Zombie Disk',
         'ZOMBIE_RESOURCE': 'Bagli ISO',
-        'NUMA_ALIGNMENT': 'NUMA',
+        'NUM_ALIGNMENT': 'NUMA',
         'FLOPPY_CONNECTED': 'Floppy',
         'STORAGE_OVERPROVISIONED': 'Fazla Storage'
     }
@@ -258,7 +177,7 @@ def generate_optimization_pdf(rightsizing_data, report_type, logo_path=None):
     
     # Title
     report_title = type_names.get(report_type, f'{report_type} Raporu')
-    elements.append(Paragraph(f"RVTools - {report_title}", title_style))
+    elements.append(Paragraph(turkish_to_ascii(f"RVTools - {report_title}"), title_style))
     elements.append(Paragraph(
         f"Olusturulma Tarihi: {datetime.now().strftime('%d.%m.%Y %H:%M')}",
         subtitle_style
@@ -335,15 +254,15 @@ def generate_optimization_pdf(rightsizing_data, report_type, logo_path=None):
         ]]
         
         # Add rows with Paragraph wrapping
-        for item in rightsizing_data[:150]:  # Limit to 150 rows
+        for item in rightsizing_data[:250]:  # Limit to 250 rows
             table_data.append([
                 Paragraph(turkish_to_ascii(str(item.get('vm', ''))), cell_style),
-                Paragraph(str(item.get('severity', '')), cell_style),
-                Paragraph(type_labels.get(item.get('type', ''), item.get('type', '')), cell_style),
+                Paragraph(turkish_to_ascii(str(item.get('severity', ''))), cell_style),
+                Paragraph(turkish_to_ascii(type_labels.get(item.get('type', ''), item.get('type', ''))), cell_style),
                 Paragraph(turkish_to_ascii(str(item.get('reason', ''))), cell_style),
                 Paragraph(turkish_to_ascii(str(item.get('current_value', ''))), cell_style),
                 Paragraph(turkish_to_ascii(str(item.get('recommended_value', ''))), cell_style),
-                Paragraph(str(item.get('potential_savings', '')), cell_style)
+                Paragraph(turkish_to_ascii(str(item.get('potential_savings', ''))), cell_style)
             ])
         
         # Dynamic column widths for A4 landscape
