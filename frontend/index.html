@@ -652,11 +652,7 @@
                                 class="nav-pill active">
                                 <i class="fas fa-home"></i> Tümü
                             </button>
-                            <button onclick="window.filterRightSizing('POWERED_OFF_DISK')"
-                                class="nav-pill nav-pill-warning">
-                                <i class="fas fa-power-off"></i> Kapalı VM
-                            </button>
-                            <button onclick="window.filterRightSizing('CPU_UNDERUTILIZED')" class="nav-pill">
+                            <button onclick="window.filterRightSizing('LOW_CPU_USAGE')" class="nav-pill">
                                 <i class="fas fa-chart-line"></i> Düşük CPU
                             </button>
                             <button onclick="window.filterRightSizing('EOL_OS')" class="nav-pill nav-pill-danger">
@@ -669,23 +665,13 @@
                             <button onclick="window.filterRightSizing('VM_TOOLS')" class="nav-pill nav-pill-danger">
                                 <i class="fas fa-tools"></i> VM Tools
                             </button>
-                            <button onclick="window.filterRightSizing('CPU_LIMIT')" class="nav-pill nav-pill-warning">
-                                <i class="fas fa-tachometer-alt"></i> CPU Limit
-                            </button>
                             <button onclick="window.filterRightSizing('OLD_SNAPSHOT')" class="nav-pill nav-pill-danger">
                                 <i class="fas fa-clock"></i> Eski Snapshot
                             </button>
                             <button onclick="window.filterRightSizing('LEGACY_NIC')" class="nav-pill">
                                 <i class="fas fa-network-wired"></i> Eski NIC
                             </button>
-                            <button
-                                onclick="document.getElementById('opt-diskwaste').scrollIntoView({behavior: 'smooth'})"
-                                class="nav-pill">
-                                <i class="fas fa-trash-alt"></i> Disk Waste
-                            </button>
-                            <button
-                                onclick="document.getElementById('opt-zombies').scrollIntoView({behavior: 'smooth'})"
-                                class="nav-pill">
+                            <button onclick="window.filterRightSizing('ZOMBIE_DISK')" class="nav-pill">
                                 <i class="fas fa-ghost"></i> Zombies
                             </button>
                         </div>
@@ -768,81 +754,7 @@
                             </div>
                         </div>
 
-                        <!-- Disk Waste Analysis -->
-                        <div id="opt-diskwaste" class="optimization-section">
-                            <h3 class="section-title">
-                                <i class="fas fa-trash-alt"></i> Disk Waste Analysis
-                            </h3>
-                            <div class="waste-summary">
-                                <div class="summary-card gradient-pink">
-                                    <i class="fas fa-hdd"></i>
-                                    <div>
-                                        <h3 id="disk-waste-total">0 GB</h3>
-                                        <p>Estimated Waste</p>
-                                    </div>
-                                </div>
-                                <div class="summary-card gradient-orange">
-                                    <i class="fas fa-list"></i>
-                                    <div>
-                                        <h3 id="disk-waste-count">0</h3>
-                                        <p>Wasteful Disks</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="table-container">
-                                <table class="data-table" id="disk-waste-table">
-                                    <thead>
-                                        <tr>
-                                            <th>VM</th>
-                                            <th>Disk</th>
-                                            <th>Waste Type</th>
-                                            <th>Capacity</th>
-                                            <th>Wasted Space</th>
-                                            <th>Provisioning</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody></tbody>
-                                </table>
-                            </div>
-                        </div>
 
-                        <!-- Zombie Disks Analysis -->
-                        <div id="opt-zombies" class="optimization-section">
-                            <h3 class="section-title">
-                                <i class="fas fa-ghost"></i> Zombie Disks
-                            </h3>
-                            <div class="waste-summary">
-                                <div class="summary-card gradient-red">
-                                    <i class="fas fa-skull-crossbones"></i>
-                                    <div>
-                                        <h3 id="opt-zombie-count">0</h3>
-                                        <p>Zombie Diskler</p>
-                                    </div>
-                                </div>
-                                <div class="summary-card gradient-purple">
-                                    <i class="fas fa-server"></i>
-                                    <div>
-                                        <h3 id="opt-zombie-vm-count">0</h3>
-                                        <p>İlişkili VM</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="table-container">
-                                <table class="data-table" id="opt-zombie-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Silinen VM Klasörü</th>
-                                            <th>Cluster</th>
-                                            <th>Datastore</th>
-                                            <th>Disk Dosyası</th>
-                                            <th>Neden Zombie?</th>
-                                            <th>Kaynak</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody></tbody>
-                                </table>
-                            </div>
-                        </div>
                     </div> <!-- opt-main-panel close -->
                 </div> <!-- opt-layout-wrapper close -->
             </section>

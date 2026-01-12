@@ -18,10 +18,7 @@ export async function loadOptimization() {
     setupTooltips();
 
     await Promise.all([
-        loadSavingsSummary(),
-        loadRightSizing(),
-        loadDiskWaste(),
-        loadZombieDisks()
+        loadRightSizing()
     ]);
 }
 
@@ -173,49 +170,7 @@ function setupPDFDropdown() {
     }
 }
 
-async function loadSavingsSummary() {
-    try {
-        const [rightSizing, diskWaste, zombieDisks] = await Promise.all([
-            fetchRightSizing(),
-            fetchDiskWaste(),
-            fetchZombieDisks()
-        ]);
-
-        let cpuSavings = 0;
-        let ramSavings = 0;
-        let diskSavings = 0;
-
-        // Count total unique VMs affected
-        const affectedVMs = new Set();
-
-        // 1. Right Sizing Savings
-        if (rightSizing.recommendations) {
-            rightSizing.recommendations.forEach(rec => {
-                affectedVMs.add(rec.vm);
-                if (rec.resource_type === 'vCPU') cpuSavings += rec.potential_savings;
-                if (rec.resource_type === 'RAM_GB') ramSavings += rec.potential_savings;
-                if (rec.resource_type === 'DISK_GB') diskSavings += rec.potential_savings;
-            });
-        }
-
-        // 2. Disk Waste Savings
-        if (diskWaste.total_wasted_gb) {
-            diskSavings += diskWaste.total_wasted_gb;
-            if (diskWaste.disks) {
-                diskWaste.disks.forEach(d => affectedVMs.add(d.vm));
-            }
-        }
-
-        // Update UI
-        document.getElementById('summary-cpu-savings').innerHTML = `${formatNumber(cpuSavings)} <small>vCPU</small>`;
-        document.getElementById('summary-ram-savings').innerHTML = `${formatNumber(ramSavings)} <small>GB</small>`;
-        document.getElementById('summary-disk-savings').innerHTML = `${formatNumber(diskSavings)} <small>GB</small>`;
-        document.getElementById('summary-total-vms').textContent = affectedVMs.size;
-
-    } catch (error) {
-        console.error('Error loading savings summary:', error);
-    }
-}
+// Savings summary now calculated inside loadRightSizing to use the central data
 
 async function loadRightSizing() {
     try {
@@ -223,6 +178,9 @@ async function loadRightSizing() {
 
         // Cache for filtering
         rightSizingData = data.recommendations || [];
+
+        // Update Summary Dashboard
+        updateSummaryDashboard(rightSizingData);
 
         renderHierarchyFilter();
 
@@ -234,40 +192,63 @@ async function loadRightSizing() {
     }
 }
 
+function updateSummaryDashboard(recommendations) {
+    let cpuSavings = 0;
+    let ramSavings = 0;
+    let diskSavings = 0;
+    const affectedVMs = new Set();
+
+    recommendations.forEach(rec => {
+        affectedVMs.add(rec.vm);
+        if (rec.resource_type === 'vCPU') cpuSavings += rec.potential_savings;
+        if (rec.resource_type === 'RAM_GB') ramSavings += rec.potential_savings;
+        if (rec.resource_type === 'DISK_GB' || rec.resource_type === 'Storage') {
+            diskSavings += rec.potential_savings || 0;
+        }
+    });
+
+    document.getElementById('summary-cpu-savings').innerHTML = `${formatNumber(cpuSavings)} <small>vCPU</small>`;
+    document.getElementById('summary-ram-savings').innerHTML = `${formatNumber(ramSavings)} <small>GB</small>`;
+    document.getElementById('summary-disk-savings').innerHTML = `${formatNumber(diskSavings)} <small>GB</small>`;
+    document.getElementById('summary-total-vms').textContent = affectedVMs.size;
+}
+
 function renderHierarchyFilter() {
     const container = document.getElementById('opt-hierarchy-filter');
     if (!container) return;
 
     const geoMap = {};
+    const foundClusters = new Set();
+
     rightSizingData.forEach(rec => {
         const dc = rec.datacenter || 'Unknown DC';
         const cluster = rec.cluster || 'Unknown Cluster';
         if (!geoMap[dc]) geoMap[dc] = new Set();
         geoMap[dc].add(cluster);
+        foundClusters.add(cluster);
     });
+
+    // Populate selectedClusters if it was empty (initial load)
+    if (selectedClusters.size === 0) {
+        foundClusters.forEach(c => selectedClusters.add(c));
+    }
 
     let html = '';
     const dcs = Object.keys(geoMap).sort();
-
-    // Default: Select all clusters initially
-    selectedClusters.clear();
-    dcs.forEach(dc => {
-        geoMap[dc].forEach(cluster => selectedClusters.add(cluster));
-    });
-
     dcs.forEach(dc => {
         const clusters = Array.from(geoMap[dc]).sort();
+        const allChecked = clusters.every(c => selectedClusters.has(c));
+
         html += `
-            <div class="hierarchy-item">
-                <div class="dc-item">
-                    <input type="checkbox" id="dc-${dc}" checked onclick="window.toggleOptDC('${dc}', this)">
-                    <label for="dc-${dc}">${dc}</label>
+            <div class="dc-group mb-2">
+                <div class="dc-header">
+                    <input type="checkbox" id="dc-${dc}" ${allChecked ? 'checked' : ''} onclick="window.toggleOptDC('${dc}', this)">
+                    <label for="dc-${dc}"><strong>${dc}</strong></label>
                 </div>
-                <div class="cluster-list" id="clusters-of-${dc}">
+                <div class="cluster-list ms-3" id="clusters-of-${dc}">
                     ${clusters.map(cluster => `
                         <div class="cluster-item">
-                            <input type="checkbox" name="opt-cluster" value="${cluster}" checked 
-                                   data-dc="${dc}" onclick="window.toggleOptCluster(this)">
+                            <input type="checkbox" value="${cluster}" data-dc="${dc}" ${selectedClusters.has(cluster) ? 'checked' : ''} onclick="window.toggleOptCluster(this)">
                             <label title="${cluster}">${cluster}</label>
                         </div>
                     `).join('')}
@@ -368,72 +349,6 @@ window.filterRightSizing = function (type) {
     applyAllFilters();
 };
 
-async function loadDiskWaste() {
-    try {
-        const data = await fetchDiskWaste();
-
-        // Cache for PDF export
-        diskWasteData = data.disks || [];
-
-        document.getElementById('disk-waste-total').textContent = `${formatNumber(data.total_wasted_gb || 0)} GB`;
-        document.getElementById('disk-waste-count').textContent = data.disk_count || 0;
-
-        const tbody = document.querySelector('#disk-waste-table tbody');
-        if (!data.disks || data.disks.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><i class="fas fa-check-circle"></i><p>Disk atığı tespit edilmedi</p></td></tr>';
-            return;
-        }
-
-        tbody.innerHTML = data.disks.map(disk => `
-            <tr onclick="window.showVMDetail('${escapeHtml(disk.vm)}', '${disk.source}')" style="cursor: pointer;">
-                <td><strong>${disk.vm}</strong></td>
-                <td>${disk.disk_name}</td>
-                <td>${formatWasteType(disk.waste_type)}</td>
-                <td>${formatNumber(disk.capacity_gb)} GB</td>
-                <td><strong class="text-danger">${formatNumber(disk.estimated_waste_gb)} GB</strong></td>
-                <td>${disk.thin ? 'Thin' : 'Thick'}</td>
-            </tr>
-        `).join('');
-    } catch (error) {
-        console.error('Error loading disk waste:', error);
-    }
-}
-
-async function loadZombieDisks() {
-    try {
-        const data = await fetchZombieDisks();
-
-        // Cache for PDF export
-        zombieDisksData = data.disks || [];
-
-        document.getElementById('opt-zombie-count').textContent = data.disk_count || 0;
-        document.getElementById('opt-zombie-vm-count').textContent = data.vm_count || 0;
-
-        const tbody = document.querySelector('#opt-zombie-table tbody');
-        if (!data.disks || data.disks.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><i class="fas fa-check-circle"></i><p>Zombie disk bulunamadı</p></td></tr>';
-            return;
-        }
-
-        tbody.innerHTML = data.disks.map(disk => `
-            <tr ${disk.VM && disk.VM !== 'Bilinmiyor' ? `onclick="window.showVMDetail('${escapeHtml(disk.VM)}', '${disk.Source}')" style="cursor: pointer;"` : ''}>
-                <td><strong>${disk.VM || 'Bilinmiyor'}</strong></td>
-                <td>${disk.Cluster || '-'}</td>
-                <td>${disk.Datastore || 'Unknown'}</td>
-                <td title="${escapeHtml(disk.Full_Path || disk.Path)}">
-                    <code style="font-size: 0.85em;">${disk.Filename || truncateText(disk.Full_Path || disk.Path, 40)}</code>
-                </td>
-                <td class="text-warning">
-                    <i class="fas fa-exclamation-triangle"></i> 
-                    ${disk.Reason || 'Orphaned disk'}
-                </td>
-                <td>${disk.Source || '-'}</td>
-            </tr>
-        `).join('');
-    } catch (error) {
-        console.error('Error loading zombie disks:', error);
-    }
-}
 
 // Helper functions
 function formatLabel(key) {
@@ -449,19 +364,12 @@ function formatLabel(key) {
 
 // Optimization type definitions with explanations
 const OPTIMIZATION_TYPES = {
-    'POWERED_OFF_DISK': {
-        label: 'Kapalı VM (Disk)',
-        icon: 'fa-power-off',
-        color: 'warning',
-        desc: 'VM kapalı durumda ancak disk alanı hala kullanılıyor.',
-        action: 'VM artık gerekmiyorsa silin veya disk\'i arşivleyin. DR için gerekliyse belgelendirin.'
-    },
-    'CPU_UNDERUTILIZED': {
+    'LOW_CPU_USAGE': {
         label: 'Düşük CPU Kullanımı',
         icon: 'fa-chart-line',
         color: 'info',
-        desc: 'vCPU kullanımı sürekli %50\'nin altında. Fazla vCPU scheduler overhead\'i artırır.',
-        action: 'vCPU sayısını azaltın. NUMA uyumu için: Cores per Socket = Host NUMA core sayısına bölünebilir olmalı (örn: 8 vCPU = 1x8 veya 2x4).'
+        desc: 'vCPU kullanımı sürekli %10\'un altında. Fazla vCPU scheduler overhead\'i artırır.',
+        action: 'vCPU sayısını azaltın. Mevcut kullanım vCPU kapasitesinin çok altında.'
     },
     'CONSOLIDATE_SNAPSHOTS': {
         label: 'Snapshot Birleştirme',
@@ -484,12 +392,12 @@ const OPTIMIZATION_TYPES = {
         desc: 'VMware Tools kurulu değil veya eski sürüm.',
         action: 'Güncel VMware Tools kurun. Performans ve yönetim özelliklerini etkiler.'
     },
-    'ZOMBIE_RESOURCE': {
-        label: 'Unutulmuş Kaynak',
+    'ZOMBIE_DISK': {
+        label: 'Zombie Disk',
         icon: 'fa-ghost',
-        color: 'warning',
-        desc: 'Bağlı CD/ISO veya kullanılmayan cihaz tespit edildi.',
-        action: 'Bağlı medyayı çıkarın. vMotion\'ı engelleyebilir ve güvenlik riski oluşturur.'
+        color: 'danger',
+        desc: 'Datastore\'da sahipsiz disk dosyası bulundu. Hiçbir VM\'e bağlı değil.',
+        action: 'Bu disk dosyasını silin veya ilişkili VM\'i bulun.'
     },
     'NUMA_ALIGNMENT': {
         label: 'NUMA Hizalama',
@@ -518,13 +426,6 @@ const OPTIMIZATION_TYPES = {
         color: 'warning',
         desc: 'Snapshot 7 günden eski. Performansı düşürür, disk büyümesine neden olur.',
         action: 'Artık gerekmiyorsa silin. Snapshot uzun süreli yedek değildir.'
-    },
-    'CPU_LIMIT': {
-        label: 'CPU Limiti',
-        icon: 'fa-tachometer-alt',
-        color: 'warning',
-        desc: 'CPU limit ayarlanmış. Kaynak olsa bile VM kullanamıyor.',
-        action: 'Limiti kaldırın. Reservation tercih edilir, limit performans sorunlarına yol açar.'
     },
     'RAM_LIMIT': {
         label: 'RAM Limiti',
