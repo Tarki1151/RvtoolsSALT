@@ -49,6 +49,10 @@
                 <i class="fas fa-database"></i>
                 <span>Datastores</span>
             </a>
+            <a href="#" class="nav-item" data-page="dr">
+                <i class="fas fa-shield-alt"></i>
+                <span>DR Analiz</span>
+            </a>
             <a href="#" class="nav-item" data-page="optimization">
                 <i class="fas fa-chart-line"></i>
                 <span>Optimizasyon</span>
@@ -528,6 +532,110 @@
                                     <tbody></tbody>
                                 </table>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- DR Analysis Page -->
+            <section id="page-dr" class="page">
+                <div class="dr-container">
+                    <!-- Summary Stats -->
+                    <div class="dr-summary-section">
+                        <div class="dr-stat-cards">
+                            <div class="dr-stat-card gradient-blue">
+                                <div class="dr-stat-icon"><i class="fas fa-server"></i></div>
+                                <div class="dr-stat-content">
+                                    <h3 id="dr-total-production">0</h3>
+                                    <p>Aktif VM</p>
+                                </div>
+                            </div>
+                            <div class="dr-stat-card gradient-green">
+                                <div class="dr-stat-icon"><i class="fas fa-copy"></i></div>
+                                <div class="dr-stat-content">
+                                    <h3 id="dr-total-replicated">0</h3>
+                                    <p>Replike VM</p>
+                                </div>
+                            </div>
+                            <div class="dr-stat-card gradient-purple">
+                                <div class="dr-stat-icon"><i class="fas fa-percentage"></i></div>
+                                <div class="dr-stat-content">
+                                    <h3 id="dr-coverage-pct">0%</h3>
+                                    <p>Kapsama Oranı</p>
+                                </div>
+                            </div>
+                            <div class="dr-stat-card gradient-orange">
+                                <div class="dr-stat-icon"><i class="fas fa-exclamation-triangle"></i></div>
+                                <div class="dr-stat-content">
+                                    <h3 id="dr-unprotected">0</h3>
+                                    <p>Korumasız VM</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- DC Flows & DR Sites Grid -->
+                    <div class="dr-grid">
+                        <!-- DC to DC Flows -->
+                        <div class="dr-section">
+                            <h3><i class="fas fa-exchange-alt"></i> Veri Merkezi Replikasyon Akışları</h3>
+                            <div id="dr-dc-flows" class="dr-flows-container">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+
+                        <!-- DR Sites Capacity -->
+                        <div class="dr-section">
+                            <h3><i class="fas fa-building"></i> DR Site Kapasiteleri</h3>
+                            <div id="dr-sites" class="dr-sites-container">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Matched Pairs Table -->
+                    <div class="dr-section full-width">
+                        <h3><i class="fas fa-link"></i> Eşleştirilmiş VM Çiftleri</h3>
+                        <div class="table-container">
+                            <table class="data-table" id="dr-pairs-table">
+                                <thead>
+                                    <tr>
+                                        <th>Prod. VM</th>
+                                        <th>Prod. DC</th>
+                                        <th>Prod. Cluster</th>
+                                        <th>Replika VM</th>
+                                        <th>DR DC</th>
+                                        <th>DR Cluster</th>
+                                        <th>vCPU</th>
+                                        <th>RAM (GB)</th>
+                                        <th>Disk (GB)</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Unprotected Critical VMs -->
+                    <div class="dr-section full-width">
+                        <h3><i class="fas fa-shield-virus"></i> Korumasız Kritik VM'ler (Top 20)</h3>
+                        <p class="section-desc">Bu VM'ler için tespit edilmiş bir replika bulunamadı. Kaynak kullanımına
+                            göre sıralanmıştır.</p>
+                        <div class="table-container">
+                            <table class="data-table" id="dr-unprotected-table">
+                                <thead>
+                                    <tr>
+                                        <th>VM</th>
+                                        <th>Datacenter</th>
+                                        <th>Cluster</th>
+                                        <th>vCPU</th>
+                                        <th>RAM (GB)</th>
+                                        <th>Disk (GB)</th>
+                                        <th>OS</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
                         </div>
                     </div>
                 </div>

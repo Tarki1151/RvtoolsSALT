@@ -55,6 +55,7 @@ function initNavigation() {
                 'hosts-clusters': 'Hosts & Clusters',
                 risks: 'Altyapı Risk Analizi',
                 datastores: 'Datastores',
+                dr: 'DR Analiz',
                 optimization: 'Optimization'
             };
             document.getElementById('page-title').textContent = titles[page] || page;
@@ -91,6 +92,10 @@ function initNavigation() {
                 case 'optimization':
                     const { loadOptimization } = await import('./optimization.js');
                     await loadOptimization();
+                    break;
+                case 'dr':
+                    const { loadDR } = await import('./dr.js');
+                    loadDR();
                     break;
             }
             initResizing();
