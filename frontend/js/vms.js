@@ -4,6 +4,8 @@ import { currentSource, setVmsData } from './config.js';
 import { formatNumber, truncateText, escapeHtml } from './utils.js';
 import { showVMDetail } from './vmDetail.js';
 
+let debounceTimer = null;
+
 export async function loadVMs() {
     try {
         const search = document.getElementById('filter-vm-search')?.value || '';
@@ -11,14 +13,17 @@ export async function loadVMs() {
         const cluster = document.getElementById('filter-cluster')?.value || '';
         const host = document.getElementById('filter-host')?.value || '';
         const os = document.getElementById('filter-os')?.value || '';
+        const osType = document.getElementById('filter-os-type')?.value || '';
+        const source = document.getElementById('filter-source')?.value || '';
 
         const params = {
-            source: currentSource,
+            source: source || currentSource,
             search,
             powerstate,
             cluster,
             host,
-            os
+            os,
+            os_type: osType
         };
 
         const result = await fetchVMs(params);
@@ -29,10 +34,35 @@ export async function loadVMs() {
 
         if (!Array.isArray(result)) {
             updateFilteredSummary(result.summary);
-            populateFilters(result.filter_options);
+            updateFilterOptions(result.filter_options);
         }
+
+        // Setup filter change listeners (once)
+        setupFilterListeners();
     } catch (error) {
         console.error('Error loading VMs:', error);
+    }
+}
+
+function setupFilterListeners() {
+    const filterIds = ['filter-powerstate', 'filter-cluster', 'filter-host', 'filter-os', 'filter-os-type', 'filter-source'];
+
+    filterIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el && !el.dataset.listenerAttached) {
+            el.addEventListener('change', () => loadVMs());
+            el.dataset.listenerAttached = 'true';
+        }
+    });
+
+    // Search with debounce
+    const searchInput = document.getElementById('filter-vm-search');
+    if (searchInput && !searchInput.dataset.listenerAttached) {
+        searchInput.addEventListener('input', () => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => loadVMs(), 300);
+        });
+        searchInput.dataset.listenerAttached = 'true';
     }
 }
 
@@ -40,7 +70,7 @@ function renderVMsTable(vms) {
     const tbody = document.querySelector('#vms-table tbody');
 
     if (vms.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="empty-state"><i class="fas fa-server"></i><p>VM bulunamadı</p></td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-state"><i class="fas fa-server"></i><p>VM bulunamadı</p></td></tr>';
         return;
     }
 
@@ -72,28 +102,49 @@ function updateFilteredSummary(summary) {
     if (el('filt-vm-disk')) el('filt-vm-disk').textContent = `${formatNumber(summary.disk_gb)} GB`;
 }
 
-function populateFilters(options) {
+function updateFilterOptions(options) {
     if (!options) return;
 
-    const populate = (id, items) => {
+    // Update each filter dropdown while preserving current selection if still valid
+    const updateSelect = (id, items, keepFirst = true) => {
         const select = document.getElementById(id);
         if (!select) return;
+
         const currentValue = select.value;
 
-        if (select.options.length <= 1) {
-            let html = '<option value="">Tümü</option>';
-            items.forEach(item => {
-                html += `<option value="${item}">${item}</option>`;
-            });
-            select.innerHTML = html;
+        // Build new options
+        let html = keepFirst ? '<option value="">Tümü</option>' : '';
+        items.forEach(item => {
+            const selected = item === currentValue ? 'selected' : '';
+            html += `<option value="${item}" ${selected}>${item}</option>`;
+        });
 
-            if (currentValue && items.includes(currentValue)) {
-                select.value = currentValue;
-            }
+        select.innerHTML = html;
+
+        // If current value is no longer valid, reset to "Tümü"
+        if (currentValue && !items.includes(currentValue)) {
+            select.value = '';
         }
     };
 
-    populate('filter-cluster', options.clusters);
-    populate('filter-host', options.hosts);
-    populate('filter-os', options.os);
+    updateSelect('filter-cluster', options.clusters);
+    updateSelect('filter-host', options.hosts);
+    updateSelect('filter-os', options.os);
+    updateSelect('filter-source', options.sources);
+
+    // OS Type is static (Srv/Dsk), but update if dynamic options come from backend
+    if (options.os_types) {
+        const osTypeSelect = document.getElementById('filter-os-type');
+        if (osTypeSelect) {
+            const currentValue = osTypeSelect.value;
+            let html = '<option value="">Tümü</option>';
+            options.os_types.forEach(item => {
+                if (item && item !== 'Unknown') {
+                    const selected = item === currentValue ? 'selected' : '';
+                    html += `<option value="${item}" ${selected}>${item}</option>`;
+                }
+            });
+            osTypeSelect.innerHTML = html;
+        }
+    }
 }

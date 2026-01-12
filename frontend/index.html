@@ -236,40 +236,42 @@
 
             <!-- VMs Page -->
             <section id="page-vms" class="page">
-                <!-- Filtered Summary -->
-                <div class="report-summary" style="margin-bottom: 20px;">
-                    <div class="summary-card gradient-blue" style="padding: 15px;">
-                        <i class="fas fa-server"></i>
-                        <div>
-                            <h3 id="filt-vm-count">0</h3>
-                            <p>VM Sayısı</p>
+                <!-- Sticky Header Section -->
+                <div class="vm-sticky-header">
+                    <!-- Filtered Summary -->
+                    <div class="report-summary vm-summary-compact">
+                        <div class="summary-card gradient-blue">
+                            <i class="fas fa-server"></i>
+                            <div>
+                                <h3 id="filt-vm-count">0</h3>
+                                <p>VM Sayısı</p>
+                            </div>
+                        </div>
+                        <div class="summary-card gradient-purple">
+                            <i class="fas fa-microchip"></i>
+                            <div>
+                                <h3 id="filt-vm-cpu">0</h3>
+                                <p>Toplam vCPU</p>
+                            </div>
+                        </div>
+                        <div class="summary-card gradient-teal">
+                            <i class="fas fa-memory"></i>
+                            <div>
+                                <h3 id="filt-vm-ram">0 GB</h3>
+                                <p>Toplam RAM</p>
+                            </div>
+                        </div>
+                        <div class="summary-card gradient-pink">
+                            <i class="fas fa-hdd"></i>
+                            <div>
+                                <h3 id="filt-vm-disk">0 GB</h3>
+                                <p>Toplam Disk</p>
+                            </div>
                         </div>
                     </div>
-                    <div class="summary-card gradient-purple" style="padding: 15px;">
-                        <i class="fas fa-microchip"></i>
-                        <div>
-                            <h3 id="filt-vm-cpu">0</h3>
-                            <p>Toplam vCPU</p>
-                        </div>
-                    </div>
-                    <div class="summary-card gradient-teal" style="padding: 15px;">
-                        <i class="fas fa-memory"></i>
-                        <div>
-                            <h3 id="filt-vm-ram">0 GB</h3>
-                            <p>Toplam RAM</p>
-                        </div>
-                    </div>
-                    <div class="summary-card gradient-pink" style="padding: 15px;">
-                        <i class="fas fa-hdd"></i>
-                        <div>
-                            <h3 id="filt-vm-disk">0 GB</h3>
-                            <p>Toplam Disk</p>
-                        </div>
-                    </div>
-                </div>
 
-                <div class="page-header">
-                    <div class="filter-bar">
+                    <!-- Filters -->
+                    <div class="filter-bar vm-filter-bar">
                         <div class="filter-group">
                             <label>Power State</label>
                             <select id="filter-powerstate">
@@ -297,29 +299,59 @@
                             </select>
                         </div>
                         <div class="filter-group">
+                            <label>Tip</label>
+                            <select id="filter-os-type">
+                                <option value="">Tümü</option>
+                                <option value="Srv">Srv</option>
+                                <option value="Dsk">Dsk</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>Kaynak</label>
+                            <select id="filter-source">
+                                <option value="">Tümü</option>
+                            </select>
+                        </div>
+                        <div class="filter-group filter-search">
                             <label>Ara</label>
                             <input type="text" id="filter-vm-search" placeholder="VM Ara...">
                         </div>
-                        <button class="btn btn-primary" id="btn-filter-vms">
-                            <i class="fas fa-filter"></i> Filtrele
-                        </button>
+                    </div>
+
+                    <!-- Table Header (Fixed) -->
+                    <div class="vm-table-header">
+                        <table class="data-table" id="vms-table-header">
+                            <thead>
+                                <tr>
+                                    <th class="sortable" data-key="VM">VM Adı <i class="fas fa-sort"></i></th>
+                                    <th class="sortable" data-key="Powerstate">Durum <i class="fas fa-sort"></i></th>
+                                    <th class="sortable" data-key="CPUs">vCPU <i class="fas fa-sort"></i></th>
+                                    <th class="sortable" data-key="Memory">RAM (MB) <i class="fas fa-sort"></i></th>
+                                    <th class="sortable" data-key="Total disk capacity MiB">Disk (MiB) <i
+                                            class="fas fa-sort"></i></th>
+                                    <th class="sortable" data-key="OS according to the configuration file">OS <i
+                                            class="fas fa-sort"></i></th>
+                                    <th class="sortable" data-key="Host">Host <i class="fas fa-sort"></i></th>
+                                    <th class="sortable" data-key="Source">Kaynak <i class="fas fa-sort"></i></th>
+                                </tr>
+                            </thead>
+                        </table>
                     </div>
                 </div>
 
-                <div class="table-container">
+                <!-- Scrollable Table Body -->
+                <div class="vm-table-body">
                     <table class="data-table" id="vms-table">
-                        <thead>
+                        <thead class="hidden-header">
                             <tr>
-                                <th class="sortable" data-key="VM">VM Adı <i class="fas fa-sort"></i></th>
-                                <th class="sortable" data-key="Powerstate">Durum <i class="fas fa-sort"></i></th>
-                                <th class="sortable" data-key="CPUs">vCPU <i class="fas fa-sort"></i></th>
-                                <th class="sortable" data-key="Memory">RAM (MB) <i class="fas fa-sort"></i></th>
-                                <th class="sortable" data-key="Total disk capacity MiB">Disk (MiB) <i
-                                        class="fas fa-sort"></i></th>
-                                <th class="sortable" data-key="OS according to the configuration file">OS <i
-                                        class="fas fa-sort"></i></th>
-                                <th class="sortable" data-key="Host">Host <i class="fas fa-sort"></i></th>
-                                <th class="sortable" data-key="Source">Kaynak <i class="fas fa-sort"></i></th>
+                                <th>VM Adı</th>
+                                <th>Durum</th>
+                                <th>vCPU</th>
+                                <th>RAM (MB)</th>
+                                <th>Disk (MiB)</th>
+                                <th>OS</th>
+                                <th>Host</th>
+                                <th>Kaynak</th>
                             </tr>
                         </thead>
                         <tbody>

@@ -278,6 +278,7 @@ def api_vms():
     cluster = request.args.get('cluster', None)
     host = request.args.get('host', None)
     os_name = request.args.get('os', None)
+    os_type = request.args.get('os_type', None)  # Dsk or Srv
     pool = request.args.get('pool', None)
     pool_path = request.args.get('pool_path', None)
     
@@ -292,47 +293,87 @@ def api_vms():
         return jsonify({
             'data': [], 
             'summary': {'count': 0, 'cpu': 0, 'memory_gb': 0, 'disk_gb': 0},
-            'filter_options': {'clusters': [], 'hosts': [], 'os': []}
+            'filter_options': {'clusters': [], 'hosts': [], 'os': [], 'sources': [], 'os_types': []}
         })
 
-    # Prepare Filter Options (from FULL dataset before filtering, or after? 
-    # Usually better to show options valid for current context, but let's show all valid options for the source)
-    # Actually, dynamic filtering (faceted search) is better. Let's calculate options based on current filtered set 
-    # OR provide global options. Let's provide global options for the selected source to avoid confusion.
+    # Define OS Type classification
+    def classify_os_type(os_str):
+        if pd.isna(os_str) or not os_str:
+            return 'Unknown'
+        os_lower = str(os_str).lower()
+        # Desktop patterns
+        desktop_patterns = ['windows 7', 'windows 8', 'windows 10', 'windows 11', 
+                           'windows xp', 'windows vista', 'macos', 'mac os', 'ubuntu desktop']
+        # Server patterns  
+        server_patterns = ['server', 'centos', 'rhel', 'red hat', 'debian', 'suse', 
+                          'oracle linux', 'freebsd', 'vmware', 'esxi', 'photon']
+        
+        for pattern in desktop_patterns:
+            if pattern in os_lower:
+                return 'Dsk'
+        for pattern in server_patterns:
+            if pattern in os_lower:
+                return 'Srv'
+        # Default: if contains 'linux' without desktop, assume server
+        if 'linux' in os_lower:
+            return 'Srv'
+        return 'Unknown'
     
-    unique_clusters = sorted(vinfo['Cluster'].dropna().unique().tolist())
-    unique_hosts = sorted(vinfo['Host'].dropna().unique().tolist())
-    unique_os = sorted(vinfo['OS according to the configuration file'].dropna().unique().tolist())
+    # Add OS Type column
+    vinfo['OS_Type'] = vinfo['OS according to the configuration file'].apply(classify_os_type)
 
-    # Apply Filters
+    # Get all unique sources first (before filtering)
+    all_sources = sorted(get_combined_data('vInfo')['Source'].dropna().unique().tolist()) if not source else [source]
+
+    # Apply Filters progressively and recalculate options after each
+    filtered = vinfo.copy()
+    
     if search:
-        vinfo = vinfo[vinfo['VM'].str.lower().str.contains(search, na=False)]
+        filtered = filtered[filtered['VM'].str.lower().str.contains(search, na=False)]
     
     if powerstate:
-        vinfo = vinfo[vinfo['Powerstate'] == powerstate]
-        
+        filtered = filtered[filtered['Powerstate'] == powerstate]
+    
+    # Calculate available options AFTER powerstate filter
+    available_clusters = sorted(filtered['Cluster'].dropna().unique().tolist())
+    available_hosts = sorted(filtered['Host'].dropna().unique().tolist())
+    available_os = sorted(filtered['OS according to the configuration file'].dropna().unique().tolist())
+    available_os_types = sorted(filtered['OS_Type'].dropna().unique().tolist())
+    
     if cluster:
-        vinfo = vinfo[vinfo['Cluster'] == cluster]
+        filtered = filtered[filtered['Cluster'] == cluster]
+        # Recalculate dependent options
+        available_hosts = sorted(filtered['Host'].dropna().unique().tolist())
+        available_os = sorted(filtered['OS according to the configuration file'].dropna().unique().tolist())
+        available_os_types = sorted(filtered['OS_Type'].dropna().unique().tolist())
         
     if host:
-        vinfo = vinfo[vinfo['Host'] == host]
+        filtered = filtered[filtered['Host'] == host]
+        # Recalculate dependent options
+        available_os = sorted(filtered['OS according to the configuration file'].dropna().unique().tolist())
+        available_os_types = sorted(filtered['OS_Type'].dropna().unique().tolist())
+        
+    if os_type:
+        filtered = filtered[filtered['OS_Type'] == os_type]
+        # Recalculate OS options
+        available_os = sorted(filtered['OS according to the configuration file'].dropna().unique().tolist())
         
     if os_name:
-        vinfo = vinfo[vinfo['OS according to the configuration file'] == os_name]
+        filtered = filtered[filtered['OS according to the configuration file'] == os_name]
 
     if pool:
-        vinfo = vinfo[vinfo['Resource pool'].str.contains(pool, na=False)]
+        filtered = filtered[filtered['Resource pool'].str.contains(pool, na=False)]
 
     if pool_path:
-        vinfo = vinfo[vinfo['Resource pool'] == pool_path]
+        filtered = filtered[filtered['Resource pool'] == pool_path]
     
     # Calculate Summary
-    total_cpu = int(vinfo['CPUs'].sum())
-    total_memory_gb = round(vinfo['Memory'].sum() / 1024, 2)
-    total_disk_gb = round(vinfo['Total disk capacity MiB'].sum() / 1024, 2)
+    total_cpu = int(filtered['CPUs'].sum())
+    total_memory_gb = round(filtered['Memory'].sum() / 1024, 2)
+    total_disk_gb = round(filtered['Total disk capacity MiB'].sum() / 1024, 2)
     
     summary = {
-        'count': len(vinfo),
+        'count': len(filtered),
         'cpu': total_cpu,
         'memory_gb': total_memory_gb,
         'disk_gb': total_disk_gb
@@ -341,18 +382,20 @@ def api_vms():
     # Select Columns
     columns = ['VM', 'Powerstate', 'CPUs', 'Memory', 'Total disk capacity MiB', 
                'OS according to the configuration file', 'Host', 'Cluster', 'Datacenter', 
-               'Primary IP Address', 'DNS Name', 'Annotation', 'Source', 'VM ID']
+               'Primary IP Address', 'DNS Name', 'Annotation', 'Source', 'VM ID', 'OS_Type']
     
-    available_cols = [c for c in columns if c in vinfo.columns]
-    data = vinfo[available_cols].fillna('').to_dict('records')
+    available_cols = [c for c in columns if c in filtered.columns]
+    data = filtered[available_cols].fillna('').to_dict('records')
     
     return jsonify({
         'data': data,
         'summary': summary,
         'filter_options': {
-            'clusters': unique_clusters,
-            'hosts': unique_hosts,
-            'os': unique_os
+            'clusters': available_clusters,
+            'hosts': available_hosts,
+            'os': available_os,
+            'os_types': available_os_types,
+            'sources': all_sources
         }
     })
 

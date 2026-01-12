@@ -131,14 +131,7 @@ function initFilters() {
         }
     });
 
-    // Filter button
-    document.getElementById('btn-filter-vms')?.addEventListener('click', loadVMs);
-
-    // Auto-reload on dropdown change
-    ['filter-powerstate', 'filter-cluster', 'filter-host', 'filter-os'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.addEventListener('change', loadVMs);
-    });
+    // Note: Filter listeners are now handled in vms.js setupFilterListeners()
 
     // Snapshot filter button
     const snapshotBtn = document.getElementById('btn-filter-snapshots');
