@@ -322,9 +322,9 @@
                         </div>
                     </div>
 
-                    <!-- Table Header (Fixed) -->
-                    <div class="vm-table-header">
-                        <table class="data-table" id="vms-table-header">
+                    <!-- Single Table with Sticky Header -->
+                    <div class="vm-table-container">
+                        <table class="data-table vm-data-table" id="vms-table">
                             <thead>
                                 <tr>
                                     <th class="sortable" data-key="VM">VM Adı <i class="fas fa-sort"></i></th>
@@ -336,32 +336,14 @@
                                     <th class="sortable" data-key="OS according to the configuration file">OS <i
                                             class="fas fa-sort"></i></th>
                                     <th class="sortable" data-key="Host">Host <i class="fas fa-sort"></i></th>
-                                    <th class="sortable" data-key="Source">Kaynak <i class="fas fa-sort"></i></th>
+                                    <th class="sortable" data-key="Cluster">Cluster <i class="fas fa-sort"></i></th>
                                 </tr>
                             </thead>
+                            <tbody>
+                                <!-- Dynamically populated -->
+                            </tbody>
                         </table>
                     </div>
-                </div>
-
-                <!-- Scrollable Table Body -->
-                <div class="vm-table-body">
-                    <table class="data-table" id="vms-table">
-                        <thead class="hidden-header">
-                            <tr>
-                                <th>VM Adı</th>
-                                <th>Durum</th>
-                                <th>vCPU</th>
-                                <th>RAM (MB)</th>
-                                <th>Disk (MiB)</th>
-                                <th>OS</th>
-                                <th>Host</th>
-                                <th>Kaynak</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <!-- Dynamically populated -->
-                        </tbody>
-                    </table>
                 </div>
             </section>
 

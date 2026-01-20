@@ -3505,7 +3505,7 @@ th.sortable.sorted i {
 #page-vms.active {
     display: flex !important;
     flex-direction: column;
-    height: calc(100vh - 60px);
+    height: calc(100vh - var(--header-height) - 64px);
     overflow: hidden;
 }
 
@@ -3551,84 +3551,115 @@ th.sortable.sorted i {
     flex: 1.5;
 }
 
-.vm-table-header {
-    background: var(--bg-primary);
-    border-radius: 8px 8px 0 0;
-    overflow: hidden;
-}
-
-.vm-table-header table {
-    margin-bottom: 0;
-}
-
-.vm-table-header thead th {
-    background: rgba(255, 255, 255, 0.03);
-    border-bottom: 2px solid var(--accent-blue);
-}
-
-.vm-table-body {
+/* New unified table container */
+.vm-table-container {
     flex: 1;
     overflow-y: auto;
-    overflow-x: hidden;
+    overflow-x: auto;
     background: var(--bg-primary);
-    border-radius: 0 0 8px 8px;
+    border-radius: 8px;
+    min-height: 0;
+    /* Critical for flex scroll to work */
+    max-height: calc(100vh - 280px);
+    /* Ensure it doesn't exceed viewport */
 }
 
-.vm-table-body table {
-    margin-bottom: 0;
+.vm-data-table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
 }
 
-.vm-table-body .hidden-header {
-    visibility: hidden;
-    height: 0;
-    line-height: 0;
+.vm-data-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--bg-secondary);
 }
 
-.vm-table-body .hidden-header th {
-    padding: 0;
-    border: none;
+.vm-data-table thead th {
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 2px solid var(--accent-blue);
+    padding: 14px 12px;
+    text-align: left;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
 }
 
-/* Sync column widths */
-#vms-table-header th:nth-child(1),
-#vms-table td:nth-child(1) {
-    width: 15%;
+.vm-data-table tbody td {
+    padding: 12px;
+    border-bottom: 1px solid var(--border-light);
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-#vms-table-header th:nth-child(2),
-#vms-table td:nth-child(2) {
-    width: 8%;
+.vm-data-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.03);
 }
 
-#vms-table-header th:nth-child(3),
-#vms-table td:nth-child(3) {
+/* Column widths for VM table */
+.vm-data-table th:nth-child(1),
+.vm-data-table td:nth-child(1) {
+    width: 14%;
+}
+
+/* VM Adı */
+
+.vm-data-table th:nth-child(2),
+.vm-data-table td:nth-child(2) {
+    width: 7%;
+}
+
+/* Durum */
+
+.vm-data-table th:nth-child(3),
+.vm-data-table td:nth-child(3) {
     width: 6%;
 }
 
-#vms-table-header th:nth-child(4),
-#vms-table td:nth-child(4) {
+/* vCPU */
+
+.vm-data-table th:nth-child(4),
+.vm-data-table td:nth-child(4) {
+    width: 9%;
+}
+
+/* RAM */
+
+.vm-data-table th:nth-child(5),
+.vm-data-table td:nth-child(5) {
     width: 10%;
 }
 
-#vms-table-header th:nth-child(5),
-#vms-table td:nth-child(5) {
-    width: 10%;
+/* Disk */
+
+.vm-data-table th:nth-child(6),
+.vm-data-table td:nth-child(6) {
+    width: 20%;
 }
 
-#vms-table-header th:nth-child(6),
-#vms-table td:nth-child(6) {
+/* OS */
+
+.vm-data-table th:nth-child(7),
+.vm-data-table td:nth-child(7) {
+    width: 16%;
+}
+
+/* Host */
+
+.vm-data-table th:nth-child(8),
+.vm-data-table td:nth-child(8) {
     width: 18%;
 }
 
-#vms-table-header th:nth-child(7),
-#vms-table td:nth-child(7) {
-    width: 15%;
-}
-
-#vms-table-header th:nth-child(8),
-#vms-table td:nth-child(8) {
-    width: 18%;
-}
+/* Kaynak */
 
 /* =============================================
    DR ANALYSIS PAGE

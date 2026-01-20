@@ -88,7 +88,7 @@ function renderVMsTable(vms) {
             <td>${formatNumber(vm['Total disk capacity MiB'])}</td>
             <td>${truncateText(vm['OS according to the configuration file'], 30)}</td>
             <td>${truncateText(vm.Host, 25)}</td>
-            <td>${vm.Source || '-'}</td>
+            <td>${truncateText(vm.Cluster, 25) || '-'}</td>
         </tr>
     `).join('');
 }
