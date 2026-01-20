@@ -272,6 +272,21 @@
                                 <p>Toplam Disk</p>
                             </div>
                         </div>
+                        <!-- Export Button -->
+                        <div class="vm-export-dropdown">
+                            <button class="btn btn-export" id="vm-export-btn">
+                                <i class="fas fa-download"></i> Export
+                                <i class="fas fa-caret-down"></i>
+                            </button>
+                            <div class="vm-export-menu" id="vm-export-menu">
+                                <a href="#" onclick="window.exportVMsCSV(); return false;">
+                                    <i class="fas fa-file-csv"></i> CSV olarak indir
+                                </a>
+                                <a href="#" onclick="window.exportVMsXLS(); return false;">
+                                    <i class="fas fa-file-excel"></i> Excel (XLS) olarak indir
+                                </a>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Filters -->

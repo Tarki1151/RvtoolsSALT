@@ -1,6 +1,6 @@
 // Virtual Machines Page Module
 import { fetchVMs } from './api.js';
-import { currentSource, setVmsData } from './config.js';
+import { currentSource, setVmsData, vmsData } from './config.js';
 import { formatNumber, truncateText, escapeHtml } from './utils.js';
 import { showVMDetail } from './vmDetail.js';
 
@@ -148,3 +148,109 @@ function updateFilterOptions(options) {
         }
     }
 }
+
+// Export dropdown toggle
+document.addEventListener('DOMContentLoaded', () => {
+    const exportBtn = document.getElementById('vm-export-btn');
+    const exportMenu = document.getElementById('vm-export-menu');
+
+    if (exportBtn && exportMenu) {
+        exportBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            exportMenu.classList.toggle('show');
+        });
+
+        document.addEventListener('click', () => {
+            exportMenu.classList.remove('show');
+        });
+    }
+});
+
+// CSV Export - All fields
+window.exportVMsCSV = function () {
+    const data = vmsData || [];
+
+    if (data.length === 0) {
+        alert('Dışa aktarılacak veri bulunamadı.');
+        return;
+    }
+
+    // Get all unique keys from the first VM (all available columns)
+    const allKeys = Object.keys(data[0] || {});
+
+    // Priority columns first, then rest alphabetically
+    const priorityKeys = ['VM', 'Powerstate', 'CPUs', 'Memory', 'Total disk capacity MiB', 'Host', 'Cluster', 'Datacenter'];
+    const otherKeys = allKeys.filter(k => !priorityKeys.includes(k)).sort();
+    const orderedKeys = [...priorityKeys.filter(k => allKeys.includes(k)), ...otherKeys];
+
+    let csv = orderedKeys.join(',') + '\n';
+
+    data.forEach(vm => {
+        const row = orderedKeys.map(key => {
+            let val = vm[key];
+            if (val === null || val === undefined) val = '';
+            val = String(val);
+            // Escape quotes and wrap in quotes if contains comma, quote, or newline
+            if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+                val = '"' + val.replace(/"/g, '""') + '"';
+            }
+            return val;
+        });
+        csv += row.join(',') + '\n';
+    });
+
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `VMs_Full_Export_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+
+    document.getElementById('vm-export-menu')?.classList.remove('show');
+};
+
+// XLS Export - All fields (HTML table format that Excel can open)
+window.exportVMsXLS = function () {
+    const data = vmsData || [];
+
+    if (data.length === 0) {
+        alert('Dışa aktarılacak veri bulunamadı.');
+        return;
+    }
+
+    // Get all unique keys from the first VM
+    const allKeys = Object.keys(data[0] || {});
+
+    // Priority columns first, then rest alphabetically
+    const priorityKeys = ['VM', 'Powerstate', 'CPUs', 'Memory', 'Total disk capacity MiB', 'Host', 'Cluster', 'Datacenter'];
+    const otherKeys = allKeys.filter(k => !priorityKeys.includes(k)).sort();
+    const orderedKeys = [...priorityKeys.filter(k => allKeys.includes(k)), ...otherKeys];
+
+    let html = `
+        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+        <head><meta charset="UTF-8"></head>
+        <body>
+        <table border="1">
+            <thead><tr>${orderedKeys.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+            <tbody>
+    `;
+
+    data.forEach(vm => {
+        html += '<tr>';
+        orderedKeys.forEach(key => {
+            let val = vm[key];
+            if (val === null || val === undefined) val = '';
+            html += `<td>${val}</td>`;
+        });
+        html += '</tr>';
+    });
+
+    html += '</tbody></table></body></html>';
+
+    const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `VMs_Full_Export_${new Date().toISOString().slice(0, 10)}.xls`;
+    link.click();
+
+    document.getElementById('vm-export-menu')?.classList.remove('show');
+};

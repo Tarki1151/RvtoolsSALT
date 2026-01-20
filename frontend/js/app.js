@@ -30,6 +30,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Load initial data
     await loadInitialData();
 
+    // Navigate to hash page if present, otherwise dashboard
+    const initialPage = window.location.hash.slice(1) || 'dashboard';
+    navigateToPage(initialPage);
+
+    // Handle browser back/forward
+    window.addEventListener('popstate', () => {
+        const page = window.location.hash.slice(1) || 'dashboard';
+        navigateToPage(page, false); // Don't push state on popstate
+    });
+
     console.log('RVTools Visualization Dashboard - Ready');
 });
 
@@ -38,69 +48,84 @@ function initNavigation() {
         item.addEventListener('click', async (e) => {
             e.preventDefault();
             const page = item.dataset.page;
-
-            // Hide all & remove active
-            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-            document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-
-            // Show selected
-            document.getElementById(`page-${page}`).classList.add('active');
-            item.classList.add('active');
-
-            // Update page title
-            const titles = {
-                dashboard: 'Dashboard',
-                vms: 'Virtual Machines',
-                reports: 'Reports',
-                'hosts-clusters': 'Hosts & Clusters',
-                risks: 'Altyapı Risk Analizi',
-                datastores: 'Datastores',
-                dr: 'DR Analiz',
-                optimization: 'Optimization'
-            };
-            document.getElementById('page-title').textContent = titles[page] || page;
-
-            // Show/hide PDF button (only on optimization page)
-            const pdfDropdown = document.getElementById('header-pdf-dropdown');
-            if (pdfDropdown) {
-                pdfDropdown.style.display = page === 'optimization' ? 'block' : 'none';
-            }
-
-            // Load data
-            switch (page) {
-                case 'dashboard':
-                    loadDashboard();
-                    break;
-                case 'vms':
-                    loadVMs();
-                    break;
-                case 'reports':
-                    loadReports();
-                    break;
-                case 'hosts-clusters':
-                    const { loadHostsClusters } = await import('./hostsClusters.js');
-                    loadHostsClusters();
-                    break;
-                case 'risks':
-                    const { loadRisks } = await import('./risks.js');
-                    loadRisks();
-                    break;
-                case 'datastores':
-                    const { loadDatastores } = await import('./datastores.js');
-                    loadDatastores();
-                    break;
-                case 'optimization':
-                    const { loadOptimization } = await import('./optimization.js');
-                    await loadOptimization();
-                    break;
-                case 'dr':
-                    const { loadDR } = await import('./dr.js');
-                    loadDR();
-                    break;
-            }
-            initResizing();
+            navigateToPage(page);
         });
     });
+}
+
+async function navigateToPage(page, updateHash = true) {
+    // Update URL hash
+    if (updateHash) {
+        window.location.hash = page;
+    }
+
+    // Hide all & remove active
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+
+    // Show selected
+    const pageEl = document.getElementById(`page-${page}`);
+    if (pageEl) {
+        pageEl.classList.add('active');
+    }
+
+    const navItem = document.querySelector(`.nav-item[data-page="${page}"]`);
+    if (navItem) {
+        navItem.classList.add('active');
+    }
+
+    // Update page title
+    const titles = {
+        dashboard: 'Dashboard',
+        vms: 'Virtual Machines',
+        reports: 'Reports',
+        'hosts-clusters': 'Hosts & Clusters',
+        risks: 'Altyapı Risk Analizi',
+        datastores: 'Datastores',
+        dr: 'DR Analiz',
+        optimization: 'Optimization'
+    };
+    document.getElementById('page-title').textContent = titles[page] || page;
+
+    // Show/hide PDF button (only on optimization page)
+    const pdfDropdown = document.getElementById('header-pdf-dropdown');
+    if (pdfDropdown) {
+        pdfDropdown.style.display = page === 'optimization' ? 'block' : 'none';
+    }
+
+    // Load data
+    switch (page) {
+        case 'dashboard':
+            loadDashboard();
+            break;
+        case 'vms':
+            loadVMs();
+            break;
+        case 'reports':
+            loadReports();
+            break;
+        case 'hosts-clusters':
+            const { loadHostsClusters } = await import('./hostsClusters.js');
+            loadHostsClusters();
+            break;
+        case 'risks':
+            const { loadRisks } = await import('./risks.js');
+            loadRisks();
+            break;
+        case 'datastores':
+            const { loadDatastores } = await import('./datastores.js');
+            loadDatastores();
+            break;
+        case 'optimization':
+            const { loadOptimization } = await import('./optimization.js');
+            await loadOptimization();
+            break;
+        case 'dr':
+            const { loadDR } = await import('./dr.js');
+            loadDR();
+            break;
+    }
+    initResizing();
 }
 
 async function loadInitialData() {
@@ -112,7 +137,7 @@ async function loadInitialData() {
             elements.sourceFilter.innerHTML += `<option value="${source.name}">${source.name}</option>`;
         });
 
-        loadDashboard();
+        // Don't load dashboard here - navigateToPage will handle it
     } catch (error) {
         console.error('Error loading initial data:', error);
     }
